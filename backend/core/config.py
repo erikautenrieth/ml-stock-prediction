@@ -1,5 +1,5 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class StockSettings(BaseSettings):
@@ -39,10 +39,30 @@ class StockSettings(BaseSettings):
     ]
 
 
-class MLflowSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="MLFLOW_")
+class DagsHubSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="DAGSHUB_", env_file=".env", extra="ignore")
 
-    tracking_uri: str = "backend/data/mlflow/mlruns"
+    repo_owner: str = ""
+    repo_name: str = ""
+    token: SecretStr = SecretStr("")
+
+    @property
+    def repo_full(self) -> str:
+        return f"{self.repo_owner}/{self.repo_name}"
+
+    @property
+    def tracking_uri(self) -> str:
+        return f"https://dagshub.com/{self.repo_owner}/{self.repo_name}.mlflow"
+
+    @property
+    def bucket_url(self) -> str:
+        return f"https://dagshub.com/api/v1/repo-buckets/s3/{self.repo_owner}"
+
+
+class MLflowSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="MLFLOW_", env_file=".env", extra="ignore")
+
+    tracking_uri: str = ""  # set dynamically from DagsHub or override via env
     tracking_username: str = ""
     tracking_password: SecretStr = SecretStr("")
     experiment_name: str = "sp500_prediction"
@@ -50,7 +70,7 @@ class MLflowSettings(BaseSettings):
 
 
 class StorageSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="STORAGE_")
+    model_config = SettingsConfigDict(env_prefix="STORAGE_", env_file=".env", extra="ignore")
 
     dagshub_repo: str = ""
     dagshub_token: SecretStr = SecretStr("")
@@ -64,6 +84,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     stock: StockSettings = StockSettings()
+    dagshub: DagsHubSettings = DagsHubSettings()
     mlflow: MLflowSettings = MLflowSettings()
     storage: StorageSettings = StorageSettings()
     database: DatabaseSettings = DatabaseSettings()

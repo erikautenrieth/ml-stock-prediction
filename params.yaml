@@ -1,0 +1,10 @@
+stock:
+  symbol: "^GSPC"
+  start_date: "2000-08-01"
+  prediction_horizon_days: 10
+  indicator_window: 10
+
+training:
+  test_size: 0.2
+  do_tuning: true
+  n_trials: 50

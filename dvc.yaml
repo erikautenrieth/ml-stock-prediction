@@ -1,0 +1,32 @@
+stages:
+  fetch:
+    cmd: poetry run python -m backend.workflows.fetch_data
+    deps:
+      - backend/workflows/fetch_data.py
+      - backend/core/features/indicators.py
+      - backend/core/features/preprocessing.py
+    params:
+      - stock
+    outs:
+      - backend/data/raw/sp500_ohlcv.parquet
+      - backend/data/features/sp500_features.parquet
+
+  train:
+    cmd: poetry run python -m backend.workflows.train
+    deps:
+      - backend/workflows/train.py
+      - backend/ml/training/extra_tree.py
+      - backend/ml/training/tuning/optuna_tuner.py
+      - backend/data/features/sp500_features.parquet
+    params:
+      - training
+
+  predict:
+    cmd: poetry run python -m backend.workflows.predict
+    deps:
+      - backend/workflows/predict.py
+      - backend/core/prediction/mlflow_predict.py
+      - backend/data/features/sp500_features.parquet
+    outs:
+      - backend/data/predictions/sp500_predictions.parquet:
+          cache: false

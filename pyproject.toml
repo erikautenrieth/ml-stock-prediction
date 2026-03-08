@@ -28,6 +28,7 @@ pydantic = "*"
 pydantic-settings = "*"
 structlog = "*"
 dvc = { version = "*", extras = ["s3"] }
+boto3 = "*"
 
 [tool.poetry.group.frontend.dependencies]
 streamlit = "*"

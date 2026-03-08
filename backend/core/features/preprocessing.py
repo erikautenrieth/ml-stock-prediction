@@ -1,10 +1,10 @@
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
 import structlog
 import yfinance as yf
-
 from sklearn.preprocessing import StandardScaler
-from datetime import datetime
 
 from backend.core.config import settings
 from backend.core.features.indicators import calc_indicators
@@ -38,6 +38,8 @@ def get_data(
         logger.info(
             "get_data: ffill filled %d NaN values, %d remaining", nan_before - nan_after, nan_after
         )
+
+    df = transform_to_returns(df)
 
     last_day_df = df.drop("Target", axis=1).tail(1)
     training_df = df.iloc[:-10]
@@ -90,6 +92,59 @@ def fetch_extra_market_data(
         )
 
     return out
+
+
+def transform_to_returns(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert absolute prices to returns/relative values for stationarity."""
+    df = df.copy()
+    close = df["Close"].copy()
+
+    # Moving averages & bands → relative distance to close price (%)
+    relative_cols = [
+        c
+        for c in df.columns
+        if any(k in c for k in ["SMA", "EMA", "WMA", "SAR", "up_band", "mid_band", "low_band"])
+    ]
+    for col in relative_cols:
+        df[col] = (df[col] - close) / close
+
+    # Momentum/MACD → normalize by close (scale-independent)
+    normalize_cols = [
+        c
+        for c in df.columns
+        if any(c.startswith(k) for k in ["Momentum", "MACD", "MACD_SIGNAL", "MACD_HIST"])
+    ]
+    for col in normalize_cols:
+        df[col] = df[col] / close
+
+    # Interest rates → diff instead of pct_change (near-zero values cause extreme %)
+    rate_tickers = ["^TNX", "^IRX", "^FVX", "^TYX"]
+    rate_cols = [f"{t} Close" for t in rate_tickers if f"{t} Close" in df.columns]
+    for col in rate_cols:
+        df[col] = df[col].diff()
+
+    # All other prices, volume, OBV → daily returns via pct_change
+    pct_cols = ["Close", "Volume", "OBV"]
+    extra_close_cols = [c for c in df.columns if c.endswith(" Close") and c not in rate_cols]
+    pct_cols.extend(extra_close_cols)
+    for col in pct_cols:
+        if col in df.columns:
+            df[col] = df[col].pct_change()
+
+    # Volume can have 0 values → pct_change produces inf
+    df.replace([np.inf, -np.inf], 0, inplace=True)
+
+    rows_before = len(df)
+    df.dropna(inplace=True)
+    rows_dropped = rows_before - len(df)
+    if rows_dropped > 0:
+        logger.info(
+            "transform_to_returns: %d rows dropped (NaN from pct_change), %d remaining",
+            rows_dropped,
+            len(df),
+        )
+
+    return df
 
 
 def scale_data(
