@@ -777,36 +777,36 @@ stages:
       - stock                       # aus params.yaml: symbol, start_date
       - features                    # aus params.yaml: technische + fundamentale Indikatoren
     outs:
-      - data/raw/sp500_ohlcv.parquet:
+      - backend/data/raw/sp500_ohlcv.parquet:
           persist: true
-      - data/features/sp500_features.parquet:
+      - backend/data/features/sp500_features.parquet:
           persist: true
 
   train:
     cmd: python -m backend.workflows.train
     deps:
-      - data/features/sp500_features.parquet
+      - backend/data/features/sp500_features.parquet
       - backend/ml/training/
     params:
       - training                    # n_trials, test_size, random_state
     outs:
-      - data/models/:
+      - backend/data/models/:
           persist: true
     metrics:
-      - data/metrics.json:
+      - backend/data/metrics.json:
           cache: false              # git-tracked, in DagsHub UI sichtbar
 
   predict:
     cmd: python -m backend.workflows.predict
     deps:
-      - data/features/sp500_features.parquet
-      - data/models/
+      - backend/data/features/sp500_features.parquet
+      - backend/data/models/
       - backend/workflows/predict.py
     outs:
-      - data/predictions/sp500_predictions.parquet:
+      - backend/data/predictions/sp500_predictions.parquet:
           persist: true
     metrics:
-      - data/metrics.json:
+      - backend/data/metrics.json:
           cache: false
 ```
 
@@ -866,10 +866,10 @@ dvc remote modify dagshub --local user <user>
 dvc remote modify dagshub --local password <token>
 
 # Daten tracken
-dvc add data/raw/sp500_ohlcv.parquet
-dvc add data/features/sp500_features.parquet
-dvc add data/predictions/sp500_predictions.parquet
-git add data/**/*.dvc .gitignore
+dvc add backend/data/raw/sp500_ohlcv.parquet
+dvc add backend/data/features/sp500_features.parquet
+dvc add backend/data/predictions/sp500_predictions.parquet
+git add backend/data/**/*.dvc .gitignore
 git commit -m "data: training data 2026-03-08"
 dvc push
 ```
@@ -893,13 +893,13 @@ install_hooks()  # DVC-Dateien werden on-demand von DagsHub geladen
 
 def load_predictions():
     return duckdb.sql(
-        "SELECT * FROM 'data/predictions/sp500_predictions.parquet'"
+        "SELECT * FROM 'backend/data/predictions/sp500_predictions.parquet'"
     ).df()
 
 
 def load_features():
     return duckdb.sql(
-        "SELECT * FROM 'data/features/sp500_features.parquet'"
+        "SELECT * FROM 'backend/data/features/sp500_features.parquet'"
     ).df()
 ```
 
@@ -1022,3 +1022,4 @@ line-length = 120
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ```
+

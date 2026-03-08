@@ -1,0 +1,54 @@
+[tool.poetry]
+name = "ml-stock-prediction"
+version = "0.1.0"
+description = "S&P 500 Stock Prediction with ML Pipeline"
+authors = ["Erik Autenrieth"]
+readme = "README.md"
+
+packages = [
+    { include = "backend" },
+    { include = "frontend" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pandas = "*"
+numpy = "*"
+scikit-learn = "*"
+ta = "*"
+yfinance = "*"
+pyarrow = "*"
+duckdb = "*"
+joblib = "*"
+mlflow = "*"
+dagshub = "*"
+optuna = "*"
+optuna-integration = { version = "*", extras = ["mlflow"] }
+pydantic = "*"
+pydantic-settings = "*"
+dvc = { version = "*", extras = ["s3"] }
+
+[tool.poetry.group.frontend.dependencies]
+streamlit = "*"
+plotly = "*"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "*"
+pytest-cov = "*"
+ruff = "*"
+ipykernel = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
