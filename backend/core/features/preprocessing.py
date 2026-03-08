@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import structlog
 import yfinance as yf
-from sklearn.preprocessing import StandardScaler
 
 from backend.core.config import settings
 from backend.core.features.indicators import calc_indicators
@@ -12,34 +11,31 @@ from backend.core.features.indicators import calc_indicators
 logger = structlog.get_logger(__name__)
 
 
+def build_features(raw_df: pd.DataFrame, start_date: str | None = None) -> pd.DataFrame:
+    """Process raw OHLCV data into ML-ready features."""
+    df = calc_target(raw_df.copy())
+    df = calc_indicators(df)
+    df = fetch_extra_market_data(df, start_date=start_date)
+    df["Volume"] = df["Volume"].astype(float)
+    df = df.ffill()
+    df = transform_to_returns(df)
+    return df
+
+
 def get_data(
     symbol: str | None = None,
     start_date: str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Download & process data in one call. Used by exploration notebooks."""
     symbol = symbol or settings.stock.symbol
     start_date = start_date or settings.stock.start_date
     end = datetime.now().strftime("%Y-%m-%d")
 
     df = yf.download(symbol, start=start_date, end=end)
-
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.droplevel(1)
 
-    df = calc_target(df)
-    df = calc_indicators(df)
-    df = fetch_extra_market_data(df, start_date=start_date)
-
-    df["Volume"] = df["Volume"].astype(float)
-
-    nan_before = df.isna().sum().sum()
-    df = df.ffill()
-    nan_after = df.isna().sum().sum()
-    if nan_before > 0:
-        logger.info(
-            "get_data: ffill filled %d NaN values, %d remaining", nan_before - nan_after, nan_after
-        )
-
-    df = transform_to_returns(df)
+    df = build_features(df, start_date=start_date)
 
     last_day_df = df.drop("Target", axis=1).tail(1)
     training_df = df.iloc[:-10]
@@ -145,13 +141,3 @@ def transform_to_returns(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     return df
-
-
-def scale_data(
-    train_x: np.ndarray,
-    test_x: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, StandardScaler]:
-    scaler = StandardScaler()
-    train_x = scaler.fit_transform(train_x)
-    test_x = scaler.transform(test_x)
-    return train_x, test_x, scaler

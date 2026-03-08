@@ -16,7 +16,7 @@ logger = structlog.get_logger(__name__)
 def train_model(
     trainer: Trainer | None = None,
     do_tuning: bool = True,
-    n_trials: int = 50,
+    n_trials: int = 60,
 ) -> TrainResult:
     """Full training pipeline: load features → tune → train → log to DagsHub."""
     init_dagshub()

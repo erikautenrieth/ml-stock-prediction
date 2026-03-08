@@ -69,13 +69,6 @@ class MLflowSettings(BaseSettings):
     model_name: str = "best_ExtraTreesClassifier_model"
 
 
-class StorageSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="STORAGE_", env_file=".env", extra="ignore")
-
-    dagshub_repo: str = ""
-    dagshub_token: SecretStr = SecretStr("")
-
-
 class DatabaseSettings(BaseSettings):
     data_dir: str = "backend/data"
 
@@ -86,7 +79,6 @@ class Settings(BaseSettings):
     stock: StockSettings = StockSettings()
     dagshub: DagsHubSettings = DagsHubSettings()
     mlflow: MLflowSettings = MLflowSettings()
-    storage: StorageSettings = StorageSettings()
     database: DatabaseSettings = DatabaseSettings()
 
 
