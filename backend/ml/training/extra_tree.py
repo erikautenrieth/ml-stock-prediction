@@ -21,21 +21,16 @@ class ExtraTreesTrainer(Trainer):
 
     def search_space(self, trial: optuna.Trial) -> dict:
         limit_depth = trial.suggest_categorical("limit_depth", [True, False])
-        class_weight = trial.suggest_categorical(
-            "class_weight", ["balanced", "balanced_subsample", "none"]
-        )
         bootstrap = trial.suggest_categorical("bootstrap", [True, False])
         return {
-            "n_estimators": trial.suggest_int("n_estimators", 800, 2000, step=100),
-            "max_depth": trial.suggest_int("max_depth", 3, 80) if limit_depth else None,
-            "min_samples_split": trial.suggest_int("min_samples_split", 2, 50),
-            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 30),
-            "max_features": trial.suggest_float("max_features", 0.05, 1.0),
-            "criterion": trial.suggest_categorical("criterion", ["gini", "entropy", "log_loss"]),
+            "n_estimators": trial.suggest_int("n_estimators", 800, 1500, step=100),
+            "max_depth": trial.suggest_int("max_depth", 5, 30) if limit_depth else None,
+            "min_samples_split": trial.suggest_int("min_samples_split", 2, 10),
+            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 5),
+            "max_features": trial.suggest_float("max_features", 0.1, 0.8),
+            "criterion": trial.suggest_categorical("criterion", ["gini", "entropy"]),
             "bootstrap": bootstrap,
-            "max_samples": trial.suggest_float("max_samples", 0.5, 1.0) if bootstrap else None,
-            "class_weight": None if class_weight == "none" else class_weight,
-            "min_impurity_decrease": trial.suggest_float("min_impurity_decrease", 0.0, 0.05),
+            "max_samples": trial.suggest_float("max_samples", 0.7, 1.0) if bootstrap else None,
         }
 
     def build(self, params: dict | None = None) -> ExtraTreesClassifier:
