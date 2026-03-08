@@ -1,11 +1,9 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
+import optuna
 import pandas as pd
 from sklearn.model_selection import train_test_split
-
-from backend.core.config import settings
-from backend.core.features.preprocessing import scale_data
 
 
 class Trainer(ABC):
@@ -22,6 +20,11 @@ class Trainer(ABC):
     @abstractmethod
     def default_params(self) -> dict: ...
 
+    @abstractmethod
+    def search_space(self, trial: optuna.Trial) -> dict:
+        """Define Optuna search space for hyperparameter tuning."""
+        ...
+
     def prepare(
         self,
         df: pd.DataFrame,
@@ -35,7 +38,5 @@ class Trainer(ABC):
             test_size=test_size,
             shuffle=False,
         )
-        x_train, x_test, scaler = scale_data(x_train, x_test)
-        self._scaler = scaler
         self._feature_names = features.columns.tolist()
         return x_train, x_test, y_train, y_test

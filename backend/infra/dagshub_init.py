@@ -20,8 +20,11 @@ def init_dagshub() -> None:
     cfg = settings.dagshub
     token = cfg.token.get_secret_value()
 
-    if token:
-        os.environ["DAGSHUB_USER_TOKEN"] = token
+    if not token:
+        logger.warning("dagshub_skipped", reason="No DAGSHUB_USER_TOKEN set")
+        return
+
+    os.environ["DAGSHUB_USER_TOKEN"] = token
 
     dagshub.init(
         repo_owner=cfg.repo_owner,
