@@ -202,22 +202,119 @@ def load_champion():
 - Artefakte auf DagsHub Storage (20 GB free, kein S3 nötig)
 - `@champion` Alias statt deprecated `transition_model_version_stage`
 
-## Datenbank-Strategie: DuckDB + Parquet
+## Daten-Architektur: DagsHub + Parquet (keine DB nötig)
 
-#### Warum DuckDB + Parquet?
+### TL;DR
 
-- **Zero Setup:** `pip install duckdb pyarrow` — kein Docker, kein Cloud-Account
-- **Parquet als Storage:** DagsHub Preview + Diffs, DVC-effizient, Typen embedded
-- **DuckDB als Query-Engine:** liest Parquet nativ (`SELECT * FROM 'file.parquet'`), analytisch schnell
-- **CSV-Parsing:** DuckDB liest auch CSVs direkt (`read_csv('file.csv')`) für Legacy-Import
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        DagsHub (20 GB Free)                             │
+│                                                                         │
+│   DVC Storage         MLflow Server          Git Repo Mirror            │
+│   ┌──────────────┐   ┌──────────────────┐   ┌────────────────────┐     │
+│   │ raw/*.parquet│   │ Experiments      │   │ dvc.yaml / .lock   │     │
+│   │ features/*   │   │ Runs + Metrics   │   │ params.yaml        │     │
+│   │ predictions/*│   │ Model Registry   │   │ metrics.json       │     │
+│   │ models/*     │   │ Artefakte (Model)│   │ *.dvc Pointer      │     │
+│   └──────────────┘   └──────────────────┘   └────────────────────┘     │
+│         ▲                     ▲                       ▲                  │
+│         │ dvc push            │ dagshub.init()        │ git push        │
+└─────────┼─────────────────────┼───────────────────────┼─────────────────┘
+          │                     │                       │
+┌─────────┼─────────────────────┼───────────────────────┼─────────────────┐
+│ LOKAL   │                     │                       │                  │
+│         ▼                     ▼                       ▼                  │
+│   backend/data/          MLflow Client           Git Repo               │
+│   ├── raw/*.parquet      (loggt nach DagsHub)    (Code + .dvc Pointer)  │
+│   ├── features/*.parquet                                                │
+│   ├── predictions/*.parquet                                             │
+│   └── models/*.joblib                                                   │
+│         ▲                                                               │
+│         │ liest direkt                                                  │
+│   ┌─────┴───────────┐                                                  │
+│   │ DuckDB (in-mem) │  ← Query-Engine, KEINE Datenbank                 │
+│   │ SELECT * FROM   │     kein Server, kein Prozess, keine .db-Datei   │
+│   │ 'file.parquet'  │     nur import duckdb + SQL auf Parquet-Files     │
+│   └─────────────────┘                                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
-> **Warum Parquet statt DuckDB-File?**
-> - DagsHub kann Parquet-Tabellen previewen + Diffs anzeigen (DuckDB-Files nicht)
-> - DVC versioniert Parquet effizient (spaltenbasiert, stabile Deltas)
-> - Typen (float64, datetime, int) sind im Parquet-Schema embedded — kein Casting nötig
-> - Parquet ist ~10× kleiner als CSV und ~2× kleiner als DuckDB-Files
+### Brauche ich eine Datenbank?
 
-#### Interface: `DataStore` ABC
+**Nein.** Alle Daten liegen als **Parquet-Files** auf der Platte und werden via **DVC** nach **DagsHub** versioniert. Das ersetzt eine klassische DB komplett:
+
+| Frage | Antwort |
+|---|---|
+| **Wo liegen die Daten?** | Lokal als Parquet in `backend/data/`, remote auf DagsHub (DVC) |
+| **Wie lese ich die Daten?** | `duckdb.sql("SELECT * FROM 'file.parquet'")` oder `pd.read_parquet()` |
+| **Wie versioniere ich?** | `dvc push` → DagsHub (20 GB free), `git commit` für `.dvc` Pointer |
+| **Brauche ich DuckDB als Server?** | Nein — DuckDB läuft **in-process**, kein Docker/Port/Daemon |
+| **Brauche ich PostgreSQL/SQLite?** | Nein — Parquet + DuckDB reicht für analytische Workloads |
+| **Was ist mit dem Frontend?** | `dagshub.streaming.install_hooks()` → liest Parquet remote, kein `dvc pull` nötig |
+
+### Warum Parquet statt einer echten DB?
+
+1. **DagsHub kann Parquet** — Tabellen-Preview + Diffs direkt im Browser (DuckDB/.db-Files nicht)
+2. **DVC-effizient** — spaltenbasiert, stabile Deltas, kleine `.dvc` Pointer in Git
+3. **Schema embedded** — Typen (float64, datetime, int) im Parquet-Header, kein Casting nötig
+4. **Kompakt** — ~10× kleiner als CSV, ~2× kleiner als DuckDB-Files
+5. **Zero Infra** — kein Server, kein Port, kein Docker für die DB
+
+### Was macht DuckDB dann genau?
+
+DuckDB ist **keine Datenbank** in diesem Projekt — es ist eine **Query-Engine** die Parquet-Files per SQL liest:
+
+```python
+import duckdb
+
+# Das ist alles — kein Server, kein Setup, kein connect()
+df = duckdb.sql("SELECT * FROM 'backend/data/features/sp500_features.parquet'").df()
+
+# Filtern ohne den ganzen DataFrame in RAM zu laden:
+recent = duckdb.sql("""
+    SELECT * FROM 'backend/data/predictions/sp500_predictions.parquet'
+    WHERE date >= CURRENT_DATE - INTERVAL '30 days'
+""").df()
+```
+
+**Alernative ohne DuckDB** (geht auch, ist nur langsamer bei großen Files):
+```python
+import pandas as pd
+df = pd.read_parquet("backend/data/features/sp500_features.parquet")
+```
+
+### Kompletter Datenfluss: Wer speichert was wo?
+
+```
+1. FETCH (GH Actions / lokal)
+   ├─ yfinance → OHLCV DataFrame
+   ├─ pandas → df.to_parquet("backend/data/raw/sp500_ohlcv.parquet")
+   ├─ calc_indicators() + extract_fundamentals()
+   ├─ pandas → df.to_parquet("backend/data/features/sp500_features.parquet")
+   └─ dvc push → DagsHub (remote Backup + Versionierung)
+
+2. TRAIN (GH Actions / lokal)
+   ├─ duckdb.sql("SELECT * FROM 'backend/data/features/...'") → DataFrame
+   ├─ ExtraTreeTrainer.train(df) → model + accuracy
+   ├─ mlflow.sklearn.log_model(model) → DagsHub MLflow (Artefakt)
+   ├─ joblib.dump(model, "backend/data/models/model.joblib")  ← Fallback
+   └─ metrics.json → git commit (DagsHub zeigt Metrics-History)
+
+3. PREDICT (GH Actions / lokal)
+   ├─ duckdb.sql("SELECT * FROM 'backend/data/features/...'") → DataFrame
+   ├─ mlflow.pyfunc.load_model("models:/...@champion") → predict
+   ├─ pandas → df.to_parquet("backend/data/predictions/sp500_predictions.parquet")
+   └─ dvc push → DagsHub
+
+4. FRONTEND (Streamlit Cloud)
+   ├─ dagshub.streaming.install_hooks()  ← Magic: DVC-Files remote lesen
+   ├─ duckdb.sql("SELECT * FROM 'backend/data/predictions/...'") → df
+   └─ Plotly Charts → User sieht Predictions
+```
+
+### DataStore Interface (Wrapper um Parquet I/O)
+
+Der `DataStore` ist kein DB-Client — er kapselt nur `read_parquet()` / `to_parquet()` + DuckDB-Queries:
 
 ```python
 # backend/infra/database/base.py
@@ -226,40 +323,70 @@ import pandas as pd
 
 
 class DataStore(ABC):
-    """Interface für Daten-Zugriff — save/load via Parquet."""
+    """Wrapper um Parquet I/O — kein DB-Server nötig."""
 
     @abstractmethod
-    def save_features(self, df: pd.DataFrame, model_name: str, accuracy: float) -> None:
-        """Speichert Feature-Daten für Training/Prediction."""
-        ...
+    def save_features(self, df: pd.DataFrame, model_name: str, accuracy: float) -> None: ...
 
     @abstractmethod
-    def save_raw(self, df: pd.DataFrame) -> None:
-        """Speichert OHLCV-Rohdaten."""
-        ...
+    def save_raw(self, df: pd.DataFrame) -> None: ...
 
     @abstractmethod
-    def save_prediction(self, df: pd.DataFrame) -> None:
-        """Speichert eine Prediction."""
-        ...
+    def save_prediction(self, df: pd.DataFrame) -> None: ...
 
     @abstractmethod
-    def load_features(self) -> pd.DataFrame:
-        """Lädt die Feature-Daten."""
-        ...
+    def load_features(self) -> pd.DataFrame: ...
 
     @abstractmethod
-    def load_predictions(self, days: int = 30) -> pd.DataFrame:
-        """Lädt Predictions der letzten N Tage."""
-        ...
+    def load_predictions(self, days: int = 30) -> pd.DataFrame: ...
 
     @abstractmethod
-    def load_raw(self) -> pd.DataFrame:
-        """Lädt OHLCV-Rohdaten."""
-        ...
+    def load_raw(self) -> pd.DataFrame: ...
 ```
 
-#### Implementierung: DuckDB + Parquet
+### Implementierung: DuckDBStore
+
+```python
+# backend/infra/database/duckdb_store.py
+from pathlib import Path
+import duckdb
+import pandas as pd
+from backend.infra.database.base import DataStore
+
+
+class DuckDBStore(DataStore):
+    """Parquet I/O mit DuckDB als Query-Engine — kein DB-Server, kein Prozess."""
+
+    def __init__(self, data_dir: str = "backend/data"):
+        self.data_dir = Path(data_dir)
+        self.raw_path = self.data_dir / "raw" / "sp500_ohlcv.parquet"
+        self.features_path = self.data_dir / "features" / "sp500_features.parquet"
+        self.predictions_path = self.data_dir / "predictions" / "sp500_predictions.parquet"
+
+    def save_raw(self, df: pd.DataFrame) -> None:
+        self.raw_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(self.raw_path)
+
+    def save_features(self, df: pd.DataFrame, model_name: str, accuracy: float) -> None:
+        self.features_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(self.features_path)
+
+    def save_prediction(self, df: pd.DataFrame) -> None:
+        self.predictions_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(self.predictions_path)
+
+    def load_raw(self) -> pd.DataFrame:
+        return duckdb.sql(f"SELECT * FROM '{self.raw_path}'").df()
+
+    def load_features(self) -> pd.DataFrame:
+        return duckdb.sql(f"SELECT * FROM '{self.features_path}'").df()
+
+    def load_predictions(self, days: int = 30) -> pd.DataFrame:
+        return duckdb.sql(f"""
+            SELECT * FROM '{self.predictions_path}'
+            WHERE date >= CURRENT_DATE - INTERVAL '{days} days'
+        """).df()
+```
 
 ```python
 # backend/infra/database/__init__.py
@@ -270,10 +397,10 @@ def get_data_store() -> DuckDBStore:
     return DuckDBStore(settings.database.data_dir)
 ```
 
-#### Docker Compose
+### Docker Compose (nur MLflow lokal — optional)
 
 ```yaml
-# docker-compose.yml
+# docker-compose.yml — nur für lokales MLflow-UI, NICHT für Daten-Storage
 services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
@@ -282,6 +409,8 @@ services:
       - ./backend/data/mlflow:/mlflow
     command: mlflow server --host 0.0.0.0 --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts
 ```
+
+> **Hinweis:** Im Normalfall nutzt du den **DagsHub MLflow-Server** (kein Docker nötig). Docker Compose ist nur ein optionaler lokaler Fallback.
 
 ---
 

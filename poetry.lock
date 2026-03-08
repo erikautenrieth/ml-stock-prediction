@@ -6462,6 +6462,18 @@ sql = ["SQLAlchemy (>=2.0.0)"]
 starlette = ["anyio (>=4.0.0)", "itsdangerous (>=2.1.2)", "python-multipart (>=0.0.10)", "starlette (>=0.40.0)", "uvicorn (>=0.30.0)", "websockets (>=12.0.0)"]
 
 [[package]]
+name = "structlog"
+version = "25.5.0"
+description = "Structured Logging for Python"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "structlog-25.5.0-py3-none-any.whl", hash = "sha256:a8453e9b9e636ec59bd9e79bbd4a72f025981b3ba0f5837aebf48f02f37a7f9f"},
+    {file = "structlog-25.5.0.tar.gz", hash = "sha256:098522a3bebed9153d4570c6d0288abf80a031dfdb2048d59a49e9dc2190fc98"},
+]
+
+[[package]]
 name = "ta"
 version = "0.11.0"
 description = "Technical Analysis Library in Python"
@@ -7249,4 +7261,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "8cfd71ef8f6d5065575e3bd9a034a7809b3038ea67b319ad4dec62cc56ef3fef"
+content-hash = "d2b9392ed63a86ec8b577caaf7017f5c91d01ba18d07489f67c067badd92ea95"
