@@ -62,6 +62,9 @@ class ExtraTreesTrainer(Trainer):
             # max_samples — only valid with bootstrap=True. Lower bound 0.6
             # avoids too few samples per tree; Breiman (2001) suggests 0.632.
             "max_samples": trial.suggest_float("max_samples", 0.6, 1.0) if bootstrap else None,
+            # class_weight — 'balanced' adjusts weights inversely proportional to class
+            # frequency, improving F1 when UP/DOWN days are mildly imbalanced (Ampomah 2020).
+            "class_weight": trial.suggest_categorical("class_weight", [None, "balanced"]),
         }
 
     def build(self, params: dict | None = None) -> ExtraTreesClassifier:

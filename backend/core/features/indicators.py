@@ -22,7 +22,8 @@ def calc_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df[f"EMA {indicator_window}"] = ta.trend.ema_indicator(close, window=indicator_window)
     df["EMA 20"] = ta.trend.ema_indicator(close, window=20)
     df[f"WMA {indicator_window}"] = ta.trend.wma_indicator(close, window=indicator_window)
-    df[f"Momentum {indicator_window}"] = close - close.shift(indicator_window)
+    # Momentum removed: after normalization by close it is nearly identical to ROC.
+    # ROC = (close - close.shift(n)) / close.shift(n) * 100 already captures this signal cleanly.
     df["SAR"] = ta.trend.PSARIndicator(high, low, close).psar()
 
     df["RSI"] = ta.momentum.rsi(close, window=14)
@@ -54,6 +55,40 @@ def calc_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["up_band"] = bb.bollinger_hband()
     df["mid_band"] = bb.bollinger_mavg()
     df["low_band"] = bb.bollinger_lband()
+    # BB %B: position within the bands (0 = lower band, 1 = upper band).
+    # Already bounded ~ [0, 1], no further transformation required.
+    df["BB_pband"] = bb.bollinger_pband()
+    # BB width: (upper - lower) / middle — normalized volatility measure.
+    # Already scale-independent, no further transformation required.
+    df["BB_width"] = bb.bollinger_wband()
+
+    # ATR normalized by close: scale-independent volatility measure.
+    # Plain ATR is in price units; dividing by close makes it stationary.
+    df["ATR_norm"] = ta.volatility.average_true_range(high, low, close, window=14) / close
+
+    # Lagged daily returns (t-1 to t-20): capture short-term momentum/mean-reversion.
+    # Pre-computed as returns so transform_to_returns leaves them untouched.
+    # Literature: Patel et al. (2015); Malla et al. (2026) validated lags up to 30 days.
+    daily_ret = close.pct_change()
+    for lag in [1, 2, 3, 5, 10, 20]:
+        df[f"ret_lag{lag}"] = daily_ret.shift(lag)
+
+    # Rolling realized volatility (multi-scale): std of daily returns over 5/10/20/60 days.
+    # One of the most consistently validated features in quantitative ML literature:
+    # Moews et al. (2019 Expert Systems), Malla et al. (2026), Pabuccu & Barbu (2024).
+    # Captures volatility regime (calm vs stressed market) which modulates signal reliability.
+    for w in [5, 10, 20, 60]:
+        df[f"vol_roll{w}"] = daily_ret.rolling(w).std()
+
+    # Overnight gap return: (open_t - close_{t-1}) / close_{t-1}.
+    # Captures information arrival during closed-market hours.
+    # Bisdoulis (2025): open-to-EMA ratios among highest feature importance for GBDTs.
+    df["gap_ret"] = (df["Open"] - close.shift(1)) / close.shift(1)
+
+    # Intraday range normalized by close: (high - low) / close.
+    # Scale-independent within-day volatility proxy; already stationary.
+    # Moews et al. (2019): intraday range consistently useful for direction prediction.
+    df["intraday_range"] = (high - low) / close
 
     rows_before = len(df)
     df.dropna(inplace=True)

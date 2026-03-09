@@ -34,6 +34,7 @@ class StockSettings(BaseSettings):
         "^IRX",
         "^FVX",
         "^TYX",
+        "^VIX",  # CBOE Volatility Index — one of the strongest S&P500 direction predictors
         "SPY",
         "EFA",
     ]

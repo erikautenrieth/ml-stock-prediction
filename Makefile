@@ -1,4 +1,4 @@
-.PHONY: fetch train predict pipeline
+.PHONY: fetch train predict pipeline frontend
 
 fetch: ## Fetch raw market data
 	poetry run python -m backend.workflows.fetch_data
@@ -10,3 +10,6 @@ predict: ## Run predictions
 	poetry run python -m backend.workflows.predict
 
 pipeline: fetch train predict ## Run full pipeline
+
+frontend: ## Launch Streamlit dashboard
+	poetry run streamlit run frontend/app.py

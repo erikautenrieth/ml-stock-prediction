@@ -1,7 +1,8 @@
 import mlflow
 import structlog
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 
+from backend.core.config import settings
 from backend.core.schemas import TrainResult
 from backend.infra.dagshub_init import init_dagshub
 from backend.infra.database import get_data_store
@@ -27,7 +28,8 @@ def train_model(
     store = get_data_store()
     df = store.load_features()
     logger.info("features_loaded", rows=len(df), columns=len(df.columns))
-    x_train, x_test, y_train, y_test = trainer.prepare(df)
+    horizon = settings.stock.prediction_horizon_days
+    x_train, x_test, y_train, y_test = trainer.prepare(df, embargo=horizon)
 
     with mlflow.start_run(run_name=f"train_{trainer.name()}") as run:
         if do_tuning:
@@ -41,9 +43,13 @@ def train_model(
         model.fit(x_train, y_train)
 
         preds = model.predict(x_test)
+        proba = model.predict_proba(x_test)[:, 1]
         metrics = {
             "accuracy": accuracy_score(y_test, preds),
-            "f1": f1_score(y_test, preds, average="weighted"),
+            "f1": f1_score(y_test, preds, zero_division=0),
+            "precision": precision_score(y_test, preds, zero_division=0),
+            "recall": recall_score(y_test, preds, zero_division=0),
+            "roc_auc": roc_auc_score(y_test, proba),
         }
         logger.info("evaluation", **metrics)
 
@@ -60,10 +66,21 @@ def train_model(
             model_uri=model_uri,
             accuracy=metrics["accuracy"],
             f1=metrics["f1"],
+            precision=metrics["precision"],
+            recall=metrics["recall"],
+            roc_auc=metrics["roc_auc"],
             params=best_params,
             run_id=run.info.run_id,
         )
-        logger.info("training_complete", run_id=run.info.run_id, accuracy=metrics["accuracy"])
+        logger.info(
+            "training_complete",
+            run_id=run.info.run_id,
+            accuracy=metrics["accuracy"],
+            f1=metrics["f1"],
+            precision=metrics["precision"],
+            recall=metrics["recall"],
+            roc_auc=metrics["roc_auc"],
+        )
 
     return result
 

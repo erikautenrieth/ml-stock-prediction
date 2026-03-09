@@ -6,6 +6,9 @@ class TrainResult(BaseModel):
     model_uri: str
     accuracy: float
     f1: float
+    precision: float
+    recall: float
+    roc_auc: float
     params: dict
     run_id: str
 
