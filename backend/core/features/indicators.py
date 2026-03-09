@@ -38,8 +38,12 @@ def calc_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["CCI"] = ta.trend.cci(high, low, close, window=14)
     df["ADOSC"] = ta.volume.chaikin_money_flow(high, low, close, volume, window=10)
 
-    df["%K"] = (close - low) * 100 / (high - low)
-    df["%D"] = df["%K"].rolling(3).mean()
+    # Correct stochastic oscillator: compares close to the 14-period high/low range
+    # (George Lane, 1950s; confirmed by Vaiz & Ramaswami 2016, Investopedia, Patel et al. 2015)
+    # Previous code only used intraday high/low (single day) — wrong formula.
+    stoch = ta.momentum.StochasticOscillator(high, low, close, window=14, smooth_window=3)
+    df["%K"] = stoch.stoch()
+    df["%D"] = stoch.stoch_signal()
 
     adx = ta.trend.ADXIndicator(high, low, close, window=14)
     df["+DMI"] = adx.adx_pos()

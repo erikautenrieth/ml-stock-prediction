@@ -105,11 +105,9 @@ def transform_to_returns(df: pd.DataFrame) -> pd.DataFrame:
         df[col] = (df[col] - close) / close
 
     # Momentum/MACD → normalize by close (scale-independent)
-    normalize_cols = [
-        c
-        for c in df.columns
-        if any(c.startswith(k) for k in ["Momentum", "MACD", "MACD_SIGNAL", "MACD_HIST"])
-    ]
+    # Note: MACD_SIGNAL and MACD_HIST already start with "MACD", so they are captured
+    # by the "MACD" prefix check — no need to list them separately.
+    normalize_cols = [c for c in df.columns if any(c.startswith(k) for k in ["Momentum", "MACD"])]
     for col in normalize_cols:
         df[col] = df[col] / close
 
@@ -119,13 +117,19 @@ def transform_to_returns(df: pd.DataFrame) -> pd.DataFrame:
     for col in rate_cols:
         df[col] = df[col].diff()
 
-    # All other prices, volume, OBV → daily returns via pct_change
-    pct_cols = ["Close", "Volume", "OBV"]
+    # All other prices and volume → daily returns via pct_change
+    pct_cols = ["Close", "Volume"]
     extra_close_cols = [c for c in df.columns if c.endswith(" Close") and c not in rate_cols]
     pct_cols.extend(extra_close_cols)
     for col in pct_cols:
         if col in df.columns:
             df[col] = df[col].pct_change()
+
+    # OBV is cumulative and can be negative → pct_change across zero is meaningless.
+    # Use daily diff normalized by close price instead (Sehgal & Garhyan 2002; OBV literature).
+    # This gives a scale-independent "volume flow rate" feature.
+    if "OBV" in df.columns:
+        df["OBV"] = df["OBV"].diff() / close
 
     # Volume can have 0 values → pct_change produces inf
     df.replace([np.inf, -np.inf], 0, inplace=True)
