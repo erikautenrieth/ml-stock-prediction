@@ -26,6 +26,7 @@ def init_dagshub() -> None:
 
     os.environ["DAGSHUB_USER_TOKEN"] = token
 
+    dagshub.auth.add_app_token(token)
     dagshub.init(
         repo_owner=cfg.repo_owner,
         repo_name=cfg.repo_name,
