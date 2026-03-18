@@ -1,5 +1,12 @@
+import os
+
 import pandas as pd
 import streamlit as st
+
+# Bridge Streamlit Cloud secrets → env vars (before config import)
+for key in ("DAGSHUB_REPO_OWNER", "DAGSHUB_REPO_NAME", "DAGSHUB_TOKEN"):
+    if key not in os.environ and hasattr(st, "secrets") and key in st.secrets:
+        os.environ[key] = st.secrets[key]
 
 from backend.core.config import settings
 from frontend.charts import (
@@ -81,17 +88,17 @@ def _render_performance_tab(
     if not visible_preds.empty:
         st.plotly_chart(
             prediction_line_chart(ohlcv, visible_preds),
-            use_container_width=True,
+            width="stretch",
         )
     st.plotly_chart(
         prediction_performance_chart(outcomes),
-        use_container_width=True,
+        width="stretch",
     )
 
     # P&L table
     st.subheader("Prediction Results")
     tbl = _build_results_table(outcomes)
-    st.dataframe(tbl, use_container_width=True)
+    st.dataframe(tbl, width="stretch")
 
     # Summary metrics
     closed = outcomes[outcomes["status"] == "closed"]
@@ -183,7 +190,7 @@ def main() -> None:
                 ohlcv,
                 visible_preds if has_preds else pd.DataFrame(),
             ),
-            use_container_width=True,
+            width="stretch",
         )
         if has_preds:
             render_model_card()
@@ -197,7 +204,7 @@ def main() -> None:
         if not visible_preds.empty:
             st.plotly_chart(
                 confidence_chart(visible_preds),
-                use_container_width=True,
+                width="stretch",
             )
         else:
             st.info("No predictions available yet.")

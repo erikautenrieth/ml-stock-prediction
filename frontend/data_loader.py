@@ -76,8 +76,9 @@ def load_model_info() -> dict:
         latest = max(versions, key=lambda v: int(v.version))
         run = client.get_run(latest.run_id)
         _update_info_from_run(info, run)
-    except Exception:
-        pass
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("load_model_info failed: %s", exc)
     return info
 
 
