@@ -1,0 +1,50 @@
+# Runs every weekday at 23:00 UTC (18:00 ET) — after US market close.
+# Jobs: fetch latest data → run predictions with the current champion model.
+# Full retraining (Optuna) happens only on the weekly schedule (weekly_train.yml).
+name: Daily Predict Pipeline
+
+on:
+  schedule:
+    - cron: "0 23 * * 1-5"   # Mon–Fri 23:00 UTC
+  workflow_dispatch:         # allow manual trigger from GitHub UI
+
+jobs:
+  predict:
+    name: Fetch + Predict
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      DAGSHUB_REPO_OWNER: ${{ secrets.DAGSHUB_REPO_OWNER }}
+      DAGSHUB_REPO_NAME:  ${{ secrets.DAGSHUB_REPO_NAME }}
+      DAGSHUB_TOKEN:      ${{ secrets.DAGSHUB_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock', '**/pyproject.toml') }}
+          restore-keys: |
+            poetry-${{ runner.os }}-
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        # Exclude dev (test/lint tools) and frontend (streamlit/plotly) — not needed in CI
+        run: poetry install --without dev,frontend
+
+      - name: Fetch market data
+        run: poetry run python -m backend.workflows.fetch_data
+
+      - name: Run prediction
+        run: poetry run python -m backend.workflows.predict

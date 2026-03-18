@@ -1,0 +1,59 @@
+# Local development stack
+# Usage:
+#   docker compose up frontend          # Streamlit UI on :8501
+#   docker compose run --rm pipeline    # one-off full pipeline run
+#   docker compose run --rm train       # one-off train-only run
+
+services:
+
+  # ── Streamlit dashboard ───────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      target: runtime
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      # Mount data directory so the container reads/writes the same parquet files
+      - ./backend/data:/app/backend/data
+    restart: unless-stopped
+
+  # ── One-off full pipeline (fetch → train → predict) ───────────────────────
+  pipeline:
+    build:
+      context: .
+      target: runtime
+    command: >
+      sh -c "
+        python -m backend.workflows.fetch_data &&
+        python -m backend.workflows.train &&
+        python -m backend.workflows.predict
+      "
+    env_file:
+      - .env
+    volumes:
+      - ./backend/data:/app/backend/data
+
+  # ── One-off train-only (skip fetch) ──────────────────────────────────────
+  train:
+    build:
+      context: .
+      target: runtime
+    command: python -m backend.workflows.train
+    env_file:
+      - .env
+    volumes:
+      - ./backend/data:/app/backend/data
+
+  # ── One-off predict-only ──────────────────────────────────────────────────
+  predict:
+    build:
+      context: .
+      target: runtime
+    command: python -m backend.workflows.predict
+    env_file:
+      - .env
+    volumes:
+      - ./backend/data:/app/backend/data
