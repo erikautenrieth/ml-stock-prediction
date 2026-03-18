@@ -115,6 +115,105 @@ def candlestick_chart(
     return fig
 
 
+def compute_prediction_outcomes(
+    ohlcv: pd.DataFrame,
+    predictions: pd.DataFrame,
+) -> pd.DataFrame:
+    """Compute actual outcomes for each prediction after HORIZON days."""
+    rows = []
+    for date, row in predictions.iterrows():
+        if date not in ohlcv.index:
+            continue
+        entry_price = float(ohlcv.loc[date, "Close"])
+        predicted_up = int(row["prediction"]) == 1
+        confidence = float(row["confidence"])
+
+        future = date + pd.Timedelta(days=HORIZON)
+        future_dates = ohlcv.index[ohlcv.index >= future]
+        if len(future_dates) == 0:
+            rows.append({
+                "date": date,
+                "direction": "UP" if predicted_up else "DOWN",
+                "confidence": confidence,
+                "entry_price": entry_price,
+                "exit_price": None,
+                "return_pct": None,
+                "pnl": None,
+                "correct": None,
+                "status": "open",
+            })
+            continue
+        exit_date = future_dates[0]
+        exit_price = float(ohlcv.loc[exit_date, "Close"])
+        pnl = exit_price - entry_price
+        return_pct = pnl / entry_price
+        actual_up = exit_price > entry_price
+        correct = predicted_up == actual_up
+
+        rows.append({
+            "date": date,
+            "direction": "UP" if predicted_up else "DOWN",
+            "confidence": confidence,
+            "entry_price": entry_price,
+            "exit_price": exit_price,
+            "return_pct": return_pct,
+            "pnl": pnl,
+            "correct": correct,
+            "status": "closed",
+        })
+    return pd.DataFrame(rows)
+
+
+def prediction_performance_chart(
+    outcomes: pd.DataFrame,
+) -> go.Figure:
+    """Bar chart showing return % per prediction, colored by correct/wrong."""
+    closed = outcomes[outcomes["status"] == "closed"].copy()
+    if closed.empty:
+        return go.Figure()
+
+    colors = [
+        UP_COLOR if c else DOWN_COLOR
+        for c in closed["correct"]
+    ]
+    labels = [
+        f"{r:+.1%}" for r in closed["return_pct"]
+    ]
+
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=closed["date"],
+                y=closed["return_pct"] * 100,
+                marker_color=colors,
+                marker_line_width=0,
+                text=labels,
+                textposition="outside",
+                textfont={"size": 11},
+                name="Return %",
+                hovertemplate=(
+                    "Date: %{x|%Y-%m-%d}<br>"
+                    "Return: %{y:.2f}%<br>"
+                    "<extra></extra>"
+                ),
+            )
+        ]
+    )
+    fig.add_hline(
+        y=0,
+        line_color="rgba(255,255,255,0.3)",
+        line_width=1,
+    )
+    fig.update_layout(
+        **_LAYOUT,
+        title=f"{settings.stock.symbol_display} — Prediction Returns ({HORIZON}d)",
+        height=420,
+    )
+    fig.update_yaxes(title="Return %", ticksuffix="%", tickprefix="")
+    fig.update_xaxes(title="")
+    return fig
+
+
 def prediction_line_chart(
     ohlcv: pd.DataFrame,
     predictions: pd.DataFrame,

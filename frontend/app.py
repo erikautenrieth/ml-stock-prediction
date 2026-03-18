@@ -2,7 +2,13 @@ import pandas as pd
 import streamlit as st
 
 from backend.core.config import settings
-from frontend.charts import candlestick_chart, confidence_chart, prediction_line_chart
+from frontend.charts import (
+    candlestick_chart,
+    compute_prediction_outcomes,
+    confidence_chart,
+    prediction_line_chart,
+    prediction_performance_chart,
+)
 from frontend.data_loader import load_predictions, load_price_data
 
 
@@ -56,9 +62,14 @@ def main() -> None:
         col3.metric("Date", pd.Timestamp(latest_date).strftime("%Y-%m-%d"))
         st.divider()
 
+    # --- Compute outcomes ---
+    outcomes = pd.DataFrame()
+    if not visible_preds.empty:
+        outcomes = compute_prediction_outcomes(ohlcv, visible_preds)
+
     # --- Charts ---
-    tab_candle, tab_line, tab_confidence = st.tabs(
-        ["🕯️ Candlestick", "📊 Line + Outcomes", "🎯 Confidence"]
+    tab_candle, tab_perf, tab_line, tab_confidence = st.tabs(
+        ["🕯️ Candlestick", "📊 Performance", "📈 Line + Outcomes", "🎯 Confidence"]
     )
 
     with tab_candle:
@@ -73,6 +84,15 @@ def main() -> None:
                 width="stretch",
             )
             st.info("No predictions available yet. Run `make predict` first.")
+
+    with tab_perf:
+        if not outcomes.empty:
+            st.plotly_chart(
+                prediction_performance_chart(outcomes),
+                width="stretch",
+            )
+        else:
+            st.info("No predictions available yet.")
 
     with tab_line:
         if not visible_preds.empty:
@@ -92,25 +112,44 @@ def main() -> None:
         else:
             st.info("No predictions available yet.")
 
-    # --- Prediction history table ---
-    if not visible_preds.empty:
-        st.subheader("Prediction History")
-        display_df = visible_preds.copy()
-        display_df.index = pd.to_datetime(display_df.index).strftime("%Y-%m-%d")
-        display_df.index.name = "Date"
-        display_df["Direction"] = display_df["prediction"].map({1: "🟢 UP", 0: "🔴 DOWN"})
-        display_df["Confidence"] = display_df["confidence"].map(lambda x: f"{x:.1%}")
-        cols = ["Direction", "Confidence"]
-        if "symbol" in display_df.columns:
-            display_df["Symbol"] = display_df["symbol"]
-            cols.append("Symbol")
-        if "horizon_days" in display_df.columns:
-            display_df["Horizon (days)"] = display_df["horizon_days"]
-            cols.append("Horizon (days)")
+    # --- Prediction results table ---
+    if not outcomes.empty:
+        st.subheader("Prediction Results")
+        tbl = outcomes.copy()
+        tbl["Date"] = pd.to_datetime(tbl["date"]).dt.strftime("%Y-%m-%d")
+        tbl["Direction"] = tbl["direction"].map({"UP": "🟢 UP", "DOWN": "🔴 DOWN"})
+        tbl["Confidence"] = tbl["confidence"].map(lambda x: f"{x:.1%}")
+        tbl["Entry $"] = tbl["entry_price"].map(lambda x: f"${x:,.2f}")
+        tbl["Exit $"] = tbl["exit_price"].map(
+            lambda x: f"${x:,.2f}" if pd.notna(x) else "⏳ pending"
+        )
+        tbl["Return %"] = tbl["return_pct"].map(
+            lambda x: f"{x:+.2%}" if pd.notna(x) else "—"
+        )
+        tbl["P&L $"] = tbl["pnl"].map(
+            lambda x: f"{'+' if x >= 0 else ''}{x:,.2f}" if pd.notna(x) else "—"
+        )
+        tbl["Result"] = tbl.apply(
+            lambda r: "⏳" if r["status"] == "open"
+            else ("✅" if r["correct"] else "❌"),
+            axis=1,
+        )
+        display_cols = ["Date", "Direction", "Confidence", "Entry $", "Exit $", "Return %", "P&L $", "Result"]
         st.dataframe(
-            display_df[cols].sort_index(ascending=False),
+            tbl[display_cols].sort_values("Date", ascending=False).reset_index(drop=True),
             width="stretch",
         )
+
+        # Summary metrics for closed predictions
+        closed = outcomes[outcomes["status"] == "closed"]
+        if not closed.empty:
+            total_pnl = closed["pnl"].sum()
+            accuracy = closed["correct"].mean()
+            avg_return = closed["return_pct"].mean()
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total P&L", f"${total_pnl:+,.2f}")
+            c2.metric("Accuracy", f"{accuracy:.0%}")
+            c3.metric("Avg Return", f"{avg_return:+.2%}")
 
 
 if __name__ == "__main__":
