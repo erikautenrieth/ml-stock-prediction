@@ -7,7 +7,6 @@ import yfinance as yf
 from backend.core.config import settings
 from backend.core.features.manifest import FeatureManifest
 from backend.core.features.preprocessing import build_features
-from backend.infra.dagshub_init import init_dagshub
 from backend.infra.database import get_data_store
 
 logger = structlog.get_logger(__name__)
@@ -40,8 +39,6 @@ def fetch_and_store(
     symbol: str | None = None,
     start_date: str | None = None,
 ) -> tuple:
-    init_dagshub()
-
     symbol = symbol or settings.stock.symbol
     start_date = start_date or settings.stock.start_date
     end = datetime.now().strftime("%Y-%m-%d")

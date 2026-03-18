@@ -1,12 +1,15 @@
 import structlog
 
 from backend.core.config import settings
+from backend.infra.dagshub_init import init_dagshub
 from backend.infra.database.duckdb_store import DuckDBStore
 
 logger = structlog.get_logger(__name__)
 
 
 def get_data_store() -> DuckDBStore:
+    init_dagshub()
+
     remote = None
     if settings.dagshub.token.get_secret_value():
         from backend.infra.storage import get_remote_storage

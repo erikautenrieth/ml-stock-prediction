@@ -5,7 +5,6 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 
 from backend.core.config import settings
 from backend.core.schemas import TrainResult
-from backend.infra.dagshub_init import init_dagshub
 from backend.infra.database import get_data_store
 from backend.ml.registry.model_registry import log_and_register
 from backend.ml.training.base import Trainer
@@ -21,8 +20,6 @@ def train_model(
     n_trials: int = 60,
 ) -> TrainResult:
     """Full training pipeline: load features → tune → train → log to DagsHub."""
-    init_dagshub()
-
     if trainer is None:
         trainer = ExtraTreesTrainer()
 

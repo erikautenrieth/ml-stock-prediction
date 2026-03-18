@@ -44,7 +44,7 @@ def load_features() -> pd.DataFrame:
 
 @st.cache_data(ttl=3600)
 def load_model_info() -> dict:
-    """Load model metadata from MLflow, falling back to config."""
+    """Load model metadata from MLflow, falling back to config defaults."""
     info: dict = {
         "model_name": "ExtraTreesClassifier",
         "model_short": "ExtraTrees",
@@ -62,30 +62,46 @@ def load_model_info() -> dict:
     try:
         from mlflow.tracking import MlflowClient
 
+        from backend.infra.dagshub_init import init_dagshub
+
+        init_dagshub()
         client = MlflowClient()
         model_name = settings.mlflow.model_name
-        versions = client.search_model_versions(f"name='{model_name}'")
-        if versions:
-            latest = max(versions, key=lambda v: int(v.version))
-            run = client.get_run(latest.run_id)
-            m = run.data.metrics
-            p = run.data.params
-            ts = run.info.start_time
-            info["accuracy"] = m.get("accuracy")
-            info["f1"] = m.get("f1")
-            info["precision"] = m.get("precision")
-            info["recall"] = m.get("recall")
-            info["roc_auc"] = m.get("roc_auc")
-            info["n_features"] = p.get("n_features")
-            if p.get("model_name"):
-                info["model_name"] = p["model_name"]
-                short = p["model_name"]
-                for suffix in ("Classifier", "Regressor"):
-                    short = short.replace(suffix, "")
-                info["model_short"] = short
-            if ts:
-                info["trained_at"] = datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d")
-            info["trained"] = True
+        versions = client.search_model_versions(
+            f"name='{model_name}'"
+        )
+        if not versions:
+            return info
+
+        latest = max(versions, key=lambda v: int(v.version))
+        run = client.get_run(latest.run_id)
+        _update_info_from_run(info, run)
     except Exception:
         pass
     return info
+
+
+def _update_info_from_run(info: dict, run: object) -> None:
+    """Fill *info* dict from an MLflow Run object."""
+    metrics = run.data.metrics
+    params = run.data.params
+
+    for key in ("accuracy", "f1", "precision", "recall", "roc_auc"):
+        info[key] = metrics.get(key)
+
+    info["n_features"] = params.get("n_features")
+
+    name = params.get("model_name")
+    if name:
+        info["model_name"] = name
+        for suffix in ("Classifier", "Regressor"):
+            name = name.replace(suffix, "")
+        info["model_short"] = name
+
+    ts = run.info.start_time
+    if ts:
+        info["trained_at"] = datetime.fromtimestamp(
+            ts / 1000
+        ).strftime("%Y-%m-%d")
+
+    info["trained"] = True

@@ -4,7 +4,6 @@ import structlog
 from backend.core.config import settings
 from backend.core.prediction.mlflow_predict import MLflowPredictor
 from backend.core.schemas import PredictionResult
-from backend.infra.dagshub_init import init_dagshub
 from backend.infra.database import get_data_store
 
 logger = structlog.get_logger(__name__)
@@ -12,8 +11,6 @@ logger = structlog.get_logger(__name__)
 
 def predict_latest() -> PredictionResult:
     """Load latest features, predict with the registered model, store result."""
-    init_dagshub()
-
     store = get_data_store()
     df = store.load_features()
 
