@@ -40,3 +40,52 @@ def load_features() -> pd.DataFrame:
         return store.load_features()
     except FileNotFoundError:
         return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600)
+def load_model_info() -> dict:
+    """Load model metadata from MLflow, falling back to config."""
+    info: dict = {
+        "model_name": "ExtraTreesClassifier",
+        "model_short": "ExtraTrees",
+        "accuracy": None,
+        "f1": None,
+        "precision": None,
+        "recall": None,
+        "roc_auc": None,
+        "n_features": None,
+        "trained_at": None,
+        "horizon": settings.stock.prediction_horizon_days,
+        "symbol": settings.stock.symbol_display,
+        "trained": False,
+    }
+    try:
+        from mlflow.tracking import MlflowClient
+
+        client = MlflowClient()
+        model_name = settings.mlflow.model_name
+        versions = client.search_model_versions(f"name='{model_name}'")
+        if versions:
+            latest = max(versions, key=lambda v: int(v.version))
+            run = client.get_run(latest.run_id)
+            m = run.data.metrics
+            p = run.data.params
+            ts = run.info.start_time
+            info["accuracy"] = m.get("accuracy")
+            info["f1"] = m.get("f1")
+            info["precision"] = m.get("precision")
+            info["recall"] = m.get("recall")
+            info["roc_auc"] = m.get("roc_auc")
+            info["n_features"] = p.get("n_features")
+            if p.get("model_name"):
+                info["model_name"] = p["model_name"]
+                short = p["model_name"]
+                for suffix in ("Classifier", "Regressor"):
+                    short = short.replace(suffix, "")
+                info["model_short"] = short
+            if ts:
+                info["trained_at"] = datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d")
+            info["trained"] = True
+    except Exception:
+        pass
+    return info

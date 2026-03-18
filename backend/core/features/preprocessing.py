@@ -1,9 +1,6 @@
-from datetime import datetime
-
 import numpy as np
 import pandas as pd
 import structlog
-import yfinance as yf
 
 from backend.core.config import settings
 from backend.core.features.indicators import calc_indicators
@@ -11,36 +8,25 @@ from backend.core.features.indicators import calc_indicators
 logger = structlog.get_logger(__name__)
 
 
-def build_features(raw_df: pd.DataFrame, start_date: str | None = None) -> pd.DataFrame:
-    """Process raw OHLCV data into ML-ready features."""
+def build_features(
+    raw_df: pd.DataFrame,
+    extra_market_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Process raw OHLCV data into ML-ready features.
+
+    Args:
+        raw_df: Raw OHLCV DataFrame.
+        extra_market_df: Pre-downloaded extra market close prices
+            (e.g. VIX, Treasury yields). If *None*, the step is skipped.
+    """
     df = calc_target(raw_df.copy())
     df = calc_indicators(df)
-    df = fetch_extra_market_data(df, start_date=start_date)
+    if extra_market_df is not None and not extra_market_df.empty:
+        df = merge_extra_market_data(df, extra_market_df)
     df["Volume"] = df["Volume"].astype(float)
     df = df.ffill()
     df = transform_to_returns(df)
     return df
-
-
-def get_data(
-    symbol: str | None = None,
-    start_date: str | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Download & process data in one call. Used by exploration notebooks."""
-    symbol = symbol or settings.stock.symbol
-    start_date = start_date or settings.stock.start_date
-    end = datetime.now().strftime("%Y-%m-%d")
-
-    df = yf.download(symbol, start=start_date, end=end)
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.droplevel(1)
-
-    df = build_features(df, start_date=start_date)
-
-    last_day_df = df.drop("Target", axis=1).tail(1)
-    training_df = df.iloc[:-10]
-
-    return training_df, last_day_df
 
 
 def calc_target(df: pd.DataFrame) -> pd.DataFrame:
@@ -49,32 +35,22 @@ def calc_target(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def fetch_extra_market_data(
+def merge_extra_market_data(
     df: pd.DataFrame,
-    start_date: str | None = None,
+    extra_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    start_date = start_date or settings.stock.start_date
-    end = datetime.now().strftime("%Y-%m-%d")
-    tickers = settings.stock.extra_tickers
+    """Align pre-downloaded extra market data to *df*'s index and merge."""
+    extra_df = extra_df.copy()
+    extra_df.interpolate(method="polynomial", order=3, inplace=True, axis=0)
+    extra_df.bfill(inplace=True)
 
-    combined = pd.DataFrame()
-    for ticker in tickers:
-        data = yf.download(ticker, start=start_date, end=end, progress=False)
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = data.columns.droplevel(1)
-        if "Close" in data.columns:
-            combined[f"{ticker} Close"] = data["Close"]
-
-    combined.interpolate(method="polynomial", order=3, inplace=True, axis=0)
-    combined.bfill(inplace=True)
-
-    combined.index = pd.to_datetime(combined.index)
+    extra_df.index = pd.to_datetime(extra_df.index)
     df_idx = pd.to_datetime(df.index)
-    combined = combined.reindex(df_idx)
+    extra_df = extra_df.reindex(df_idx)
 
     out = df.copy()
-    for col in combined.columns:
-        out[col] = combined[col].values
+    for col in extra_df.columns:
+        out[col] = extra_df[col].values
 
     nan_before = out.isna().sum().sum()
     out.interpolate(method="polynomial", order=3, inplace=True, axis=0)
@@ -82,7 +58,7 @@ def fetch_extra_market_data(
     nan_after = out.isna().sum().sum()
     if nan_before > 0:
         logger.info(
-            "fetch_extra_market_data: filled %d NaN values, %d remaining",
+            "merge_extra_market_data: filled %d NaN values, %d remaining",
             nan_before - nan_after,
             nan_after,
         )
