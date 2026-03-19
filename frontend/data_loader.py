@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 import pandas as pd
@@ -7,13 +8,31 @@ import yfinance as yf
 from backend.core.config import settings
 from backend.infra.database import get_data_store
 
+logger = logging.getLogger(__name__)
+
 
 @st.cache_data(ttl=3600)
 def load_price_data(months: int = 6) -> pd.DataFrame:
-    """Download recent OHLCV data for the configured stock symbol."""
+    """Load OHLCV data from store, falling back to yfinance on miss."""
+    cutoff = pd.Timestamp.now() - pd.DateOffset(months=months)
+    try:
+        store = get_data_store()
+        df = store.load_raw()
+        df.index = pd.to_datetime(df.index)
+        df = df[df.index >= cutoff]
+        if not df.empty:
+            logger.info("load_price_data: loaded %d rows from store", len(df))
+            return df
+        logger.warning("load_price_data: store returned empty df, falling back to yfinance")
+    except Exception as exc:
+        logger.warning("load_price_data: store failed (%s), falling back to yfinance", exc)
+
     end = datetime.now().strftime("%Y-%m-%d")
-    start = pd.Timestamp.now() - pd.DateOffset(months=months)
-    df = yf.download(settings.stock.symbol, start=start.strftime("%Y-%m-%d"), end=end)
+    df = yf.download(
+        settings.stock.symbol,
+        start=cutoff.strftime("%Y-%m-%d"),
+        end=end,
+    )
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.droplevel(1)
     return df
@@ -25,7 +44,9 @@ def load_predictions() -> pd.DataFrame:
     store = get_data_store()
     try:
         df = store.load_predictions(days=10000)
+        logger.info("load_predictions: loaded %d rows", len(df))
     except FileNotFoundError:
+        logger.warning("load_predictions: no predictions file found")
         return pd.DataFrame()
     df.index = pd.to_datetime(df.index).normalize()
     df = df[~df.index.duplicated(keep="last")]
@@ -67,9 +88,7 @@ def load_model_info() -> dict:
         init_dagshub()
         client = MlflowClient()
         model_name = settings.mlflow.model_name
-        versions = client.search_model_versions(
-            f"name='{model_name}'"
-        )
+        versions = client.search_model_versions(f"name='{model_name}'")
         if not versions:
             return info
 
@@ -77,8 +96,7 @@ def load_model_info() -> dict:
         run = client.get_run(latest.run_id)
         _update_info_from_run(info, run)
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("load_model_info failed: %s", exc)
+        logger.warning("load_model_info failed: %s", exc)
     return info
 
 
@@ -101,8 +119,6 @@ def _update_info_from_run(info: dict, run: object) -> None:
 
     ts = run.info.start_time
     if ts:
-        info["trained_at"] = datetime.fromtimestamp(
-            ts / 1000
-        ).strftime("%Y-%m-%d")
+        info["trained_at"] = datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d")
 
     info["trained"] = True
