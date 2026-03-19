@@ -13,29 +13,38 @@ logger = logging.getLogger(__name__)
 
 @st.cache_data(ttl=3600)
 def load_price_data(months: int = 6) -> pd.DataFrame:
-    """Load OHLCV data from store, falling back to yfinance on miss."""
+    """Download live OHLCV from yfinance, falling back to store on error."""
     cutoff = pd.Timestamp.now() - pd.DateOffset(months=months)
+
+    # Primary: live data from Yahoo Finance
+    try:
+        end = datetime.now().strftime("%Y-%m-%d")
+        df = yf.download(
+            settings.stock.symbol,
+            start=cutoff.strftime("%Y-%m-%d"),
+            end=end,
+        )
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.droplevel(1)
+        if not df.empty:
+            logger.info("load_price_data: fetched %d rows from yfinance", len(df))
+            return df
+    except Exception as exc:
+        logger.warning("load_price_data: yfinance failed (%s), trying store", exc)
+
+    # Fallback: stored data (may be stale)
     try:
         store = get_data_store()
         df = store.load_raw()
         df.index = pd.to_datetime(df.index)
         df = df[df.index >= cutoff]
         if not df.empty:
-            logger.info("load_price_data: loaded %d rows from store", len(df))
+            logger.info("load_price_data: fallback to store, %d rows", len(df))
             return df
-        logger.warning("load_price_data: store returned empty df, falling back to yfinance")
     except Exception as exc:
-        logger.warning("load_price_data: store failed (%s), falling back to yfinance", exc)
+        logger.warning("load_price_data: store also failed (%s)", exc)
 
-    end = datetime.now().strftime("%Y-%m-%d")
-    df = yf.download(
-        settings.stock.symbol,
-        start=cutoff.strftime("%Y-%m-%d"),
-        end=end,
-    )
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.droplevel(1)
-    return df
+    return pd.DataFrame()
 
 
 @st.cache_data(ttl=600)
