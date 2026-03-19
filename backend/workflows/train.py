@@ -18,10 +18,27 @@ def train_model(
     trainer: Trainer | None = None,
     do_tuning: bool = True,
     n_trials: int = 60,
+    force: bool = False,
+    experiment: str | None = None,
 ) -> TrainResult:
-    """Full training pipeline: load features → tune → train → log to DagsHub."""
+    """Full training pipeline: load features → tune → train → log to DagsHub.
+
+    Args:
+        force: Register model even if it doesn't beat the current best.
+        experiment: Optional experiment name. Sets a separate MLflow experiment
+            and model registry name so different approaches don't collide.
+    """
     if trainer is None:
         trainer = ExtraTreesTrainer()
+
+    # Experiment isolation: each experiment gets its own MLflow experiment
+    # and model name so models from different approaches never overwrite.
+    if experiment:
+        mlflow.set_experiment(experiment)
+        model_name = f"{experiment}_{trainer.name()}"
+        logger.info("experiment_mode", experiment=experiment, model_name=model_name)
+    else:
+        model_name = None  # use default from settings
 
     store = get_data_store()
     df = store.load_features()
@@ -57,6 +74,8 @@ def train_model(
             y_train=y_train,
             params=best_params,
             metrics=metrics,
+            model_name=model_name,
+            force=force,
         )
 
         result = TrainResult(
@@ -84,4 +103,24 @@ def train_model(
 
 
 if __name__ == "__main__":
-    train_model()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Train stock prediction model")
+    parser.add_argument("--force", action="store_true", help="Register model even if worse")
+    parser.add_argument(
+        "--experiment",
+        "-e",
+        type=str,
+        default=None,
+        help="Experiment name (isolates MLflow experiment + model registry)",
+    )
+    parser.add_argument("--no-tuning", action="store_true", help="Skip Optuna tuning, use defaults")
+    parser.add_argument("--trials", type=int, default=60, help="Number of Optuna trials")
+    args = parser.parse_args()
+
+    train_model(
+        do_tuning=not args.no_tuning,
+        n_trials=args.trials,
+        force=args.force,
+        experiment=args.experiment,
+    )

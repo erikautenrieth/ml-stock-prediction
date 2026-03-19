@@ -79,8 +79,12 @@ def log_and_register(
     params: dict,
     metrics: dict,
     model_name: str | None = None,
+    force: bool = False,
 ) -> str:
     """Log model to MLflow. Only register if it beats the current best.
+
+    Set *force=True* to register regardless of performance (useful when
+    experimenting with new settings/data that aren't directly comparable).
 
     Old model versions are deleted to save storage, but their metrics/params
     are preserved as tags on the archived version and on the new run.
@@ -114,7 +118,7 @@ def log_and_register(
         )
 
     accuracy_worse = current_accuracy is not None and new_accuracy <= current_accuracy
-    if not feature_count_changed and accuracy_worse:
+    if not feature_count_changed and accuracy_worse and not force:
         # Log model as artifact but do NOT register it
         info = mlflow.sklearn.log_model(
             sk_model=model,
@@ -128,6 +132,13 @@ def log_and_register(
             reason="not better than current",
         )
         return info.model_uri
+
+    if force and accuracy_worse:
+        logger.warning(
+            "force_promoting_worse_model",
+            new_accuracy=new_accuracy,
+            current_accuracy=current_accuracy,
+        )
 
     # New model is better — register and clean up old versions
     info = mlflow.sklearn.log_model(
