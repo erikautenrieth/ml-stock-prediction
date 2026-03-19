@@ -22,6 +22,13 @@ def predict_latest() -> PredictionResult:
     proba = predictor.predict_proba(last_row)[0]
     confidence = float(max(proba))
 
+    # Grab closing price at prediction date for persistence
+    try:
+        raw_df = store.load_raw()
+        entry_price = float(raw_df.loc[last_row.index[0], "Close"])
+    except Exception:
+        entry_price = None
+
     result = PredictionResult(
         symbol=settings.stock.symbol,
         prediction=int(pred),
@@ -36,6 +43,7 @@ def predict_latest() -> PredictionResult:
             "confidence": [result.confidence],
             "symbol": [result.symbol],
             "horizon_days": [result.horizon_days],
+            "entry_price": [entry_price],
         }
     )
     pred_df.set_index("Date", inplace=True)
@@ -43,8 +51,11 @@ def predict_latest() -> PredictionResult:
     # Append to existing predictions if available
     try:
         existing = store.load_predictions(days=10000)
+        existing.index = pd.to_datetime(existing.index).normalize()
+        pred_df.index = pd.to_datetime(pred_df.index).normalize()
         pred_df = pd.concat([existing, pred_df])
         pred_df = pred_df[~pred_df.index.duplicated(keep="last")]
+        pred_df = pred_df.sort_index()
     except FileNotFoundError:
         pass
 

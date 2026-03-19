@@ -13,11 +13,30 @@ def compute_prediction_outcomes(
     """Compute actual outcomes for each prediction after HORIZON days."""
     rows = []
     for date, row in predictions.iterrows():
-        if date not in ohlcv.index:
-            continue
-        entry_price = float(ohlcv.loc[date, "Close"])
         predicted_up = int(row["prediction"]) == 1
         confidence = float(row["confidence"])
+
+        # Use stored entry_price if available, otherwise look up in OHLCV
+        if "entry_price" in row and pd.notna(row.get("entry_price")):
+            entry_price = float(row["entry_price"])
+        elif date in ohlcv.index:
+            entry_price = float(ohlcv.loc[date, "Close"])
+        else:
+            # No price data at all — still show the prediction as open
+            rows.append(
+                {
+                    "date": date,
+                    "direction": "UP" if predicted_up else "DOWN",
+                    "confidence": confidence,
+                    "entry_price": None,
+                    "exit_price": None,
+                    "return_pct": None,
+                    "pnl": None,
+                    "correct": None,
+                    "status": "open",
+                }
+            )
+            continue
 
         future = date + pd.Timedelta(days=HORIZON)
         future_dates = ohlcv.index[ohlcv.index >= future]
