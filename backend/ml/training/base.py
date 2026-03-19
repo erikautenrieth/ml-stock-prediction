@@ -39,7 +39,8 @@ class Trainer(ABC):
         contaminated by future test-set prices.  Dropping these rows ("purging"
         in López de Prado 2018) removes this lookahead bias.
         """
-        target = df["Target"]
+        df = df.dropna(subset=["Target"])
+        target = df["Target"].astype(int)
         features = df.drop("Target", axis=1)
         x_train, x_test, y_train, y_test = train_test_split(
             features.values,

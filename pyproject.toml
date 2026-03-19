@@ -12,33 +12,34 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.12"
-pandas = "*"
-numpy = "*"
-scikit-learn = "*"
-ta = "*"
-yfinance = "*"
-pyarrow = "*"
+boto3 = "*"
+dagshub = "*"
 duckdb = "*"
+dvc = { version = "*", extras = ["s3"] }
 joblib = "*"
 mlflow = "*"
-dagshub = "*"
+numpy = "*"
 optuna = "*"
 optuna-integration = { version = "*", extras = ["mlflow"] }
+pandas = "*"
+pyarrow = "*"
 pydantic = "*"
 pydantic-settings = "*"
+scikit-learn = "*"
+seaborn = "^0.13.2"
 structlog = "*"
-dvc = { version = "*", extras = ["s3"] }
-boto3 = "*"
+ta = "*"
+yfinance = "*"
 
 [tool.poetry.group.frontend.dependencies]
-streamlit = "*"
 plotly = "*"
+streamlit = "*"
 
 [tool.poetry.group.dev.dependencies]
+ipykernel = "*"
 pytest = "*"
 pytest-cov = "*"
 ruff = "*"
-ipykernel = "*"
 
 [build-system]
 requires = ["poetry-core"]

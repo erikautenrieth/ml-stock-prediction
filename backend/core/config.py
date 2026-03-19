@@ -8,6 +8,7 @@ class StockSettings(BaseSettings):
     start_date: str = "2000-08-01"
     prediction_horizon_days: int = 10
     indicator_window: int = 10
+    target_threshold: float = 0.005  # dead zone: |return| <= threshold → drop row
     extra_tickers: list[str] = [
         "GC=F",
         "CL=F",

@@ -31,7 +31,11 @@ def build_features(
 
 def calc_target(df: pd.DataFrame) -> pd.DataFrame:
     horizon = settings.stock.prediction_horizon_days
-    df["Target"] = (df["Close"].shift(-horizon) > df["Close"]).astype(int)
+    threshold = settings.stock.target_threshold
+    ret = (df["Close"].shift(-horizon) - df["Close"]) / df["Close"]
+    df["Target"] = np.where(ret > threshold, 1, np.where(ret < -threshold, 0, np.nan))
+    n_dead = df["Target"].isna().sum()
+    logger.info("calc_target: threshold=%.4f, dead_zone=%d rows (%.1f%%)", threshold, n_dead, 100 * n_dead / len(df))
     return df
 
 
