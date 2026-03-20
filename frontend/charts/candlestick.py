@@ -45,13 +45,15 @@ def candlestick_chart(
             go.Scatter(
                 x=up_dates,
                 y=up_prices,
-                mode="markers+text",
-                marker={"symbol": "triangle-up", "size": 16, "color": UP_COLOR},
-                text=["▲"] * len(up_dates),
-                textposition="top center",
-                textfont={"color": UP_COLOR, "size": 16},
+                mode="markers",
+                marker={
+                    "symbol": "triangle-up",
+                    "size": 16,
+                    "color": UP_COLOR,
+                    "line": {"width": 1, "color": "rgba(0,0,0,0.3)"},
+                },
                 name="Prediction UP",
-                showlegend=True,
+                hovertemplate="%{x|%b %d}<br>UP @ $%{y:,.2f}<extra></extra>",
             )
         )
     if dn_dates:
@@ -59,13 +61,15 @@ def candlestick_chart(
             go.Scatter(
                 x=dn_dates,
                 y=dn_prices,
-                mode="markers+text",
-                marker={"symbol": "triangle-down", "size": 16, "color": DOWN_COLOR},
-                text=["▼"] * len(dn_dates),
-                textposition="bottom center",
-                textfont={"color": DOWN_COLOR, "size": 16},
+                mode="markers",
+                marker={
+                    "symbol": "triangle-down",
+                    "size": 16,
+                    "color": DOWN_COLOR,
+                    "line": {"width": 1, "color": "rgba(0,0,0,0.3)"},
+                },
                 name="Prediction DOWN",
-                showlegend=True,
+                hovertemplate="%{x|%b %d}<br>DOWN @ $%{y:,.2f}<extra></extra>",
             )
         )
 

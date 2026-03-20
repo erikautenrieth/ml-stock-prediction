@@ -29,6 +29,7 @@ scikit-learn = "*"
 seaborn = "^0.13.2"
 structlog = "*"
 ta = "*"
+watchdog = "^6.0.0"
 yfinance = "*"
 
 [tool.poetry.group.frontend.dependencies]

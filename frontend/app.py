@@ -85,12 +85,12 @@ def _render_performance_tab(
 
     # Charts
     if not visible_preds.empty:
-        st.plotly_chart(prediction_line_chart(ohlcv, visible_preds), use_container_width=True)
-    st.plotly_chart(prediction_performance_chart(outcomes), use_container_width=True)
+        st.plotly_chart(prediction_line_chart(ohlcv, visible_preds), width="stretch")
+    st.plotly_chart(prediction_performance_chart(outcomes), width="stretch")
 
     # P&L table
     st.subheader("Prediction Results")
-    st.dataframe(_build_results_table(outcomes), use_container_width=True)
+    st.dataframe(_build_results_table(outcomes), width="stretch")
 
 
 def _build_results_table(outcomes: pd.DataFrame) -> pd.DataFrame:
@@ -162,9 +162,9 @@ def main() -> None:
         has_preds = not visible_preds.empty
         preds = visible_preds if has_preds else pd.DataFrame()
         if chart_type == "Candlestick":
-            st.plotly_chart(candlestick_chart(ohlcv, preds), use_container_width=True)
+            st.plotly_chart(candlestick_chart(ohlcv, preds), width="stretch")
         else:
-            st.plotly_chart(price_line_chart(ohlcv, preds), use_container_width=True)
+            st.plotly_chart(price_line_chart(ohlcv, preds), width="stretch")
         if has_preds:
             render_model_card()
         else:
@@ -175,7 +175,7 @@ def main() -> None:
 
     with tab_conf:
         if not visible_preds.empty:
-            st.plotly_chart(confidence_chart(visible_preds), use_container_width=True)
+            st.plotly_chart(confidence_chart(visible_preds), width="stretch")
         else:
             st.info("No predictions available yet.")
 
