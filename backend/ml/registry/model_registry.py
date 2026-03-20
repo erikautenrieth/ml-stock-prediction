@@ -10,7 +10,7 @@ logger = structlog.get_logger(__name__)
 
 
 def _get_production_info(client: MlflowClient, model_name: str) -> tuple[float | None, int | None]:
-    """Return (accuracy, n_features) of the latest registered model version."""
+    """Return (roc_auc, n_features) of the latest registered model version."""
     try:
         versions = client.search_model_versions(f"name='{model_name}'")
     except MlflowException:
@@ -21,17 +21,17 @@ def _get_production_info(client: MlflowClient, model_name: str) -> tuple[float |
 
     latest = max(versions, key=lambda v: int(v.version))
     run = client.get_run(latest.run_id)
-    acc = run.data.metrics.get("accuracy")
+    roc_auc = run.data.metrics.get("roc_auc")
     n_features = run.data.params.get("n_features")
     n_features = int(n_features) if n_features is not None else None
     logger.info(
         "existing_model_found",
         version=latest.version,
-        accuracy=acc,
+        roc_auc=roc_auc,
         n_features=n_features,
         run_id=latest.run_id,
     )
-    return acc, n_features
+    return roc_auc, n_features
 
 
 def _archive_old_versions(client: MlflowClient, model_name: str, new_run_id: str) -> None:
@@ -93,8 +93,8 @@ def log_and_register(
     model_name = model_name or settings.mlflow.model_name
     client = MlflowClient()
 
-    current_accuracy, current_n_features = _get_production_info(client, model_name)
-    new_accuracy = metrics.get("accuracy", 0)
+    current_roc_auc, current_n_features = _get_production_info(client, model_name)
+    new_roc_auc = metrics.get("roc_auc", 0)
     new_n_features = x_train.shape[1]
 
     mlflow.log_params({**params, "n_features": new_n_features})
@@ -105,7 +105,7 @@ def log_and_register(
     # If the old model has no n_features param (registered before this logging was added),
     # we cannot verify compatibility → treat it as changed to force promotion.
     feature_count_changed = (
-        current_n_features is None and current_accuracy is not None  # old model, no n_features
+        current_n_features is None and current_roc_auc is not None  # old model, no n_features
     ) or (
         current_n_features is not None and current_n_features != new_n_features  # known mismatch
     )
@@ -117,8 +117,8 @@ def log_and_register(
             reason="forced promotion — old model incompatible (n_features unknown or changed)",
         )
 
-    accuracy_worse = current_accuracy is not None and new_accuracy <= current_accuracy
-    if not feature_count_changed and accuracy_worse and not force:
+    metric_worse = current_roc_auc is not None and new_roc_auc <= current_roc_auc
+    if not feature_count_changed and metric_worse and not force:
         # Log model as artifact but do NOT register it
         info = mlflow.sklearn.log_model(
             sk_model=model,
@@ -127,17 +127,17 @@ def log_and_register(
         )
         logger.info(
             "model_not_promoted",
-            new_accuracy=new_accuracy,
-            current_accuracy=current_accuracy,
+            new_roc_auc=new_roc_auc,
+            current_roc_auc=current_roc_auc,
             reason="not better than current",
         )
         return info.model_uri
 
-    if force and accuracy_worse:
+    if force and metric_worse:
         logger.warning(
             "force_promoting_worse_model",
-            new_accuracy=new_accuracy,
-            current_accuracy=current_accuracy,
+            new_roc_auc=new_roc_auc,
+            current_roc_auc=current_roc_auc,
         )
 
     # New model is better — register and clean up old versions
@@ -151,20 +151,20 @@ def log_and_register(
     run_id = mlflow.active_run().info.run_id
     _archive_old_versions(client, model_name, run_id)
 
-    if current_accuracy is not None:
-        mlflow.set_tag("replaced_accuracy", current_accuracy)
+    if current_roc_auc is not None:
+        mlflow.set_tag("replaced_roc_auc", current_roc_auc)
         logger.info(
             "model_promoted",
             model_name=model_name,
-            new_accuracy=new_accuracy,
-            previous_accuracy=current_accuracy,
-            improvement=f"{new_accuracy - current_accuracy:+.4f}",
+            new_roc_auc=new_roc_auc,
+            previous_roc_auc=current_roc_auc,
+            improvement=f"{new_roc_auc - current_roc_auc:+.4f}",
         )
     else:
         logger.info(
             "model_registered_first",
             model_name=model_name,
-            accuracy=new_accuracy,
+            roc_auc=new_roc_auc,
         )
 
     return info.model_uri

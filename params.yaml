@@ -2,9 +2,14 @@ stock:
   symbol: "^GSPC"
   start_date: "2000-08-01"
   prediction_horizon_days: 10
+
+features:
   indicator_window: 10
+  target_threshold: 0.03        # dead zone: |return| <= threshold → drop row
 
 training:
+  training_years: 12             # rolling window: train only on last N years (null = all data)
+  sample_weight_halflife: 0.33  # exponential decay fraction (0.33 → oldest 1/3 has ≤50% weight)
   test_size: 0.2
   do_tuning: true
   n_trials: 50

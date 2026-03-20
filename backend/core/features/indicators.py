@@ -16,25 +16,24 @@ def calc_indicators(df: pd.DataFrame) -> pd.DataFrame:
     low = df["Low"]
     volume = df["Volume"].astype(float)
 
-    indicator_window = settings.stock.indicator_window
+    indicator_window = settings.features.indicator_window
 
-    df[f"SMA {indicator_window}"] = ta.trend.sma_indicator(close, window=indicator_window)
+    # SMA and WMA dropped — after relative-to-close transform nearly identical to EMA.
     df[f"EMA {indicator_window}"] = ta.trend.ema_indicator(close, window=indicator_window)
     df["EMA 20"] = ta.trend.ema_indicator(close, window=20)
-    df[f"WMA {indicator_window}"] = ta.trend.wma_indicator(close, window=indicator_window)
     # Momentum removed: after normalization by close it is nearly identical to ROC.
     # ROC = (close - close.shift(n)) / close.shift(n) * 100 already captures this signal cleanly.
     df["SAR"] = ta.trend.PSARIndicator(high, low, close).psar()
 
     df["RSI"] = ta.momentum.rsi(close, window=14)
     df["ROC"] = ta.momentum.roc(close, window=10)
-    df["%R"] = ta.momentum.williams_r(high, low, close, lbp=14)
+    # %R (Williams %R) dropped — near-inverse of RSI (both 14-period bounded oscillators)
     df["OBV"] = ta.volume.on_balance_volume(close, volume)
 
     macd = ta.trend.MACD(close, window_slow=26, window_fast=12, window_sign=9)
     df["MACD"] = macd.macd()
     df["MACD_SIGNAL"] = macd.macd_signal()
-    df["MACD_HIST"] = macd.macd_diff()
+    # MACD_HIST dropped — linear combination of MACD and MACD_SIGNAL (HIST = MACD − SIGNAL)
 
     df["CCI"] = ta.trend.cci(high, low, close, window=14)
     df["ADOSC"] = ta.volume.chaikin_money_flow(high, low, close, volume, window=10)
@@ -44,7 +43,7 @@ def calc_indicators(df: pd.DataFrame) -> pd.DataFrame:
     # Previous code only used intraday high/low (single day) — wrong formula.
     stoch = ta.momentum.StochasticOscillator(high, low, close, window=14, smooth_window=3)
     df["%K"] = stoch.stoch()
-    df["%D"] = stoch.stoch_signal()
+    # %D dropped — 3-period SMA of %K, nearly identical
 
     adx = ta.trend.ADXIndicator(high, low, close, window=14)
     df["+DMI"] = adx.adx_pos()
@@ -52,9 +51,7 @@ def calc_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["ADX"] = adx.adx()
 
     bb = ta.volatility.BollingerBands(close, window=20)
-    df["up_band"] = bb.bollinger_hband()
-    df["mid_band"] = bb.bollinger_mavg()
-    df["low_band"] = bb.bollinger_lband()
+    # Raw bands (up/mid/low) dropped — redundant with BB_pband + BB_width.
     # BB %B: position within the bands (0 = lower band, 1 = upper band).
     # Already bounded ~ [0, 1], no further transformation required.
     df["BB_pband"] = bb.bollinger_pband()

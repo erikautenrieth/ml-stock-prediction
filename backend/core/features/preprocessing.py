@@ -31,11 +31,14 @@ def build_features(
 
 def calc_target(df: pd.DataFrame) -> pd.DataFrame:
     horizon = settings.stock.prediction_horizon_days
-    threshold = settings.stock.target_threshold
+    threshold = settings.features.target_threshold
     ret = (df["Close"].shift(-horizon) - df["Close"]) / df["Close"]
     df["Target"] = np.where(ret > threshold, 1, np.where(ret < -threshold, 0, np.nan))
     n_dead = df["Target"].isna().sum()
-    logger.info("calc_target: threshold=%.4f, dead_zone=%d rows (%.1f%%)", threshold, n_dead, 100 * n_dead / len(df))
+    logger.info(
+        "calc_target: threshold=%.4f, dead_zone=%d rows (%.1f%%)",
+        threshold, n_dead, 100 * n_dead / len(df),
+    )
     return df
 
 
@@ -75,11 +78,11 @@ def transform_to_returns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     close = df["Close"].copy()
 
-    # Moving averages & bands → relative distance to close price (%)
+    # Moving averages & SAR → relative distance to close price (%)
     relative_cols = [
         c
         for c in df.columns
-        if any(k in c for k in ["SMA", "EMA", "WMA", "SAR", "up_band", "mid_band", "low_band"])
+        if any(k in c for k in ["EMA", "SAR"])
     ]
     for col in relative_cols:
         df[col] = (df[col] - close) / close
@@ -92,7 +95,7 @@ def transform_to_returns(df: pd.DataFrame) -> pd.DataFrame:
         df[col] = df[col] / close
 
     # Interest rates → diff instead of pct_change (near-zero values cause extreme %)
-    rate_tickers = ["^TNX", "^IRX", "^FVX", "^TYX"]
+    rate_tickers = ["^TNX", "^IRX"]
     rate_cols = [f"{t} Close" for t in rate_tickers if f"{t} Close" in df.columns]
     for col in rate_cols:
         df[col] = df[col].diff()

@@ -3,8 +3,14 @@
 fetch: ## Fetch raw market data
 	poetry run python -m backend.workflows.fetch_data
 
-train: ## Tune hyperparameters & train model
+train: ## Train default model (ExtraTrees)
 	poetry run python -m backend.workflows.train
+
+train-lgbm: ## Train LightGBM model
+	poetry run python -m backend.workflows.train --model lightgbm
+
+train-model: ## Train specific model (usage: make train-model MODEL=lightgbm)
+	poetry run python -m backend.workflows.train --model $(MODEL)
 
 train-force: ## Train & register model regardless of performance
 	poetry run python -m backend.workflows.train --force
@@ -17,5 +23,5 @@ predict: ## Run predictions
 
 pipeline: fetch train predict ## Run full pipeline
 
-frontend: ## Launch Streamlit dashboard
+fe: ## Launch Streamlit dashboard
 	poetry run streamlit run frontend/app.py

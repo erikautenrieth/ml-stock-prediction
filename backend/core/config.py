@@ -3,42 +3,60 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class StockSettings(BaseSettings):
+    """Identity & data-fetching settings for the target stock."""
+
     symbol: str = "^GSPC"
     symbol_display: str = "S&P500"
     start_date: str = "2000-08-01"
     prediction_horizon_days: int = 10
-    indicator_window: int = 10
-    target_threshold: float = 0.005  # dead zone: |return| <= threshold → drop row
     extra_tickers: list[str] = [
-        "GC=F",
-        "CL=F",
+        # Commodities
+        "GC=F",  # Gold
+        "CL=F",  # Crude Oil
+        # SI=F (Silver) dropped — ρ ≈ 0.8 with Gold
+        "HG=F",  # Copper
+        "NG=F",  # Natural Gas
+        # Currencies
         "EURUSD=X",
         "GBPUSD=X",
         "JPY=X",
         "CNY=X",
-        "^IXIC",
-        "^DJI",
-        "^RUT",
-        "^FTSE",
-        "^GDAXI",
-        "^FCHI",
-        "^N225",
-        "^HSI",
-        "^BSESN",
-        "^MXX",
-        "^AXJO",
-        "^IBEX",
-        "SI=F",
-        "HG=F",
-        "NG=F",
-        "^TNX",
-        "^IRX",
-        "^FVX",
-        "^TYX",
-        "^VIX",  # CBOE Volatility Index — one of the strongest S&P500 direction predictors
-        "SPY",
-        "EFA",
+        # US indices
+        "^IXIC",  # Nasdaq (tech tilt)
+        # ^DJI dropped — ρ > 0.95 with ^GSPC, ^IXIC
+        "^RUT",  # Russell 2000 (small-cap divergence)
+        # SPY dropped — ρ ≈ 0.99 with ^GSPC (target)
+        "EFA",  # Intl Developed ETF
+        # Global indices
+        "^FTSE",  # FTSE 100
+        "^GDAXI",  # DAX
+        # ^FCHI (CAC 40) dropped — ρ > 0.9 with ^GDAXI
+        "^N225",  # Nikkei 225
+        "^HSI",  # Hang Seng
+        "^BSESN",  # BSE Sensex
+        "^MXX",  # IPC Mexico
+        "^AXJO",  # ASX 200
+        # ^IBEX dropped — ρ > 0.9 with ^GDAXI, ^FTSE
+        # Volatility & rates
+        "^VIX",  # CBOE VIX — strongest S&P500 direction predictor
+        "^TNX",  # 10Y Treasury
+        "^IRX",  # 3M Treasury
+        # ^FVX (5Y) & ^TYX (30Y) dropped — ρ > 0.9 with ^TNX
     ]
+
+
+class FeatureSettings(BaseSettings):
+    """Feature engineering parameters."""
+
+    indicator_window: int = 10
+    target_threshold: float = 0.03  # dead zone: |return| <= threshold → drop row
+
+
+class TrainingSettings(BaseSettings):
+    """ML training & tuning hyperparameters."""
+
+    training_years: int | None = 12  # rolling window: keep only last N years; None = all data
+    sample_weight_halflife: float = 0.33  # exponential decay fraction
 
 
 class DagsHubSettings(BaseSettings):
@@ -79,6 +97,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     stock: StockSettings = StockSettings()
+    features: FeatureSettings = FeatureSettings()
+    training: TrainingSettings = TrainingSettings()
     dagshub: DagsHubSettings = DagsHubSettings()
     mlflow: MLflowSettings = MLflowSettings()
     database: DatabaseSettings = DatabaseSettings()

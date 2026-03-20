@@ -25,9 +25,9 @@ class MLflowPredictor(Predictor):
     def predict(self, features: pd.DataFrame) -> np.ndarray:
         if self._model is None:
             self.load_model()
-        return self._model.predict(features.values)
+        return self._model.predict(features)
 
     def predict_proba(self, features: pd.DataFrame) -> np.ndarray:
         if self._model is None:
             self.load_model()
-        return self._model.predict_proba(features.values)
+        return self._model.predict_proba(features)
