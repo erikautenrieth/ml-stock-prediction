@@ -11,22 +11,10 @@ from backend.ml.training.base import Trainer
 logger = structlog.get_logger(__name__)
 
 
-def _round_for_log(value):
-    if isinstance(value, float):
-        return round(value, 6)
-    if isinstance(value, dict):
-        return {k: _round_for_log(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_round_for_log(v) for v in value]
-    return value
-
-
 def tune(
     trainer: Trainer,
     x_train,
     y_train,
-    x_test,
-    y_test,
     *,
     sample_weights: np.ndarray | None = None,
     n_trials: int = 50,

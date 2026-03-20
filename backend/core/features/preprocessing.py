@@ -14,18 +14,26 @@ def build_features(
 ) -> pd.DataFrame:
     """Process raw OHLCV data into ML-ready features.
 
-    Args:
-        raw_df: Raw OHLCV DataFrame.
-        extra_market_df: Pre-downloaded extra market close prices
-            (e.g. VIX, Treasury yields). If *None*, the step is skipped.
+    Pipeline: Target → Indicators → Extra Market → Stationarity Transform.
+
+    Target is separated before any gap-filling (ffill / interpolate / bfill)
+    and rejoined at the very end so dead-zone and prediction-tail NaN values
+    are never corrupted.
     """
     df = calc_target(raw_df.copy())
+
+    # Separate Target before any gap-filling operations touch it.
+    target = df.pop("Target")
+
     df = calc_indicators(df)
     if extra_market_df is not None and not extra_market_df.empty:
         df = merge_extra_market_data(df, extra_market_df)
     df["Volume"] = df["Volume"].astype(float)
     df = df.ffill()
     df = transform_to_returns(df)
+
+    # Rejoin original Target (NaN for dead-zone + prediction-tail rows).
+    df["Target"] = target.reindex(df.index)
     return df
 
 
@@ -37,7 +45,9 @@ def calc_target(df: pd.DataFrame) -> pd.DataFrame:
     n_dead = df["Target"].isna().sum()
     logger.info(
         "calc_target: threshold=%.4f, dead_zone=%d rows (%.1f%%)",
-        threshold, n_dead, 100 * n_dead / len(df),
+        threshold,
+        n_dead,
+        100 * n_dead / len(df),
     )
     return df
 
@@ -79,24 +89,17 @@ def transform_to_returns(df: pd.DataFrame) -> pd.DataFrame:
     close = df["Close"].copy()
 
     # Moving averages & SAR → relative distance to close price (%)
-    relative_cols = [
-        c
-        for c in df.columns
-        if any(k in c for k in ["EMA", "SAR"])
-    ]
+    relative_cols = [c for c in df.columns if any(k in c for k in ["EMA", "SAR"])]
     for col in relative_cols:
         df[col] = (df[col] - close) / close
 
-    # Momentum/MACD → normalize by close (scale-independent)
-    # Note: MACD_SIGNAL and MACD_HIST already start with "MACD", so they are captured
-    # by the "MACD" prefix check — no need to list them separately.
-    normalize_cols = [c for c in df.columns if any(c.startswith(k) for k in ["Momentum", "MACD"])]
+    # MACD / MACD_SIGNAL → normalize by close (scale-independent)
+    normalize_cols = [c for c in df.columns if c.startswith("MACD")]
     for col in normalize_cols:
         df[col] = df[col] / close
 
     # Interest rates → diff instead of pct_change (near-zero values cause extreme %)
-    rate_tickers = ["^TNX", "^IRX"]
-    rate_cols = [f"{t} Close" for t in rate_tickers if f"{t} Close" in df.columns]
+    rate_cols = [f"{t} Close" for t in settings.features.rate_tickers if f"{t} Close" in df.columns]
     for col in rate_cols:
         df[col] = df[col].diff()
 

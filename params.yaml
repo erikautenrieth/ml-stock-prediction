@@ -5,7 +5,10 @@ stock:
 
 features:
   indicator_window: 10
-  target_threshold: 0.03        # dead zone: |return| <= threshold → drop row
+  target_threshold: 0.03        # dead zone: |return| <= threshold -> drop row
+  rate_tickers:                 # diff() instead of pct_change() (near-zero safe)
+    - "^TNX"
+    - "^IRX"
 
 training:
   training_years: 12             # rolling window: train only on last N years (null = all data)

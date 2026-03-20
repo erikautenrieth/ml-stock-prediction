@@ -50,6 +50,7 @@ class FeatureSettings(BaseSettings):
 
     indicator_window: int = 10
     target_threshold: float = 0.03  # dead zone: |return| <= threshold → drop row
+    rate_tickers: list[str] = ["^TNX", "^IRX"]  # diff() instead of pct_change()
 
 
 class TrainingSettings(BaseSettings):

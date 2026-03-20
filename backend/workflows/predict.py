@@ -15,9 +15,21 @@ def predict_latest() -> PredictionResult:
     df = store.load_features()
 
     last_row = df.drop("Target", axis=1, errors="ignore").tail(1)
-    logger.info("predicting", date=str(last_row.index[0]))
+    logger.info("predicting", date=str(last_row.index[0]), n_features=last_row.shape[1])
 
     predictor = MLflowPredictor()
+    predictor.load_model()
+
+    # Validate feature count before prediction — catches config/model drift early.
+    expected = getattr(predictor._model, "n_features_in_", None)
+    actual = last_row.shape[1]
+    if expected is not None and expected != actual:
+        raise ValueError(
+            f"Feature mismatch: model expects {expected} features, "
+            f"but feature file has {actual}. Re-train the model after "
+            f"changing features (make fetch && make train)."
+        )
+
     pred = predictor.predict(last_row)[0]
     proba = predictor.predict_proba(last_row)[0]
     confidence = float(max(proba))

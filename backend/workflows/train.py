@@ -142,8 +142,6 @@ def train_model(
                 trainer,
                 x_train,
                 y_train,
-                x_test,
-                y_test,
                 sample_weights=sample_weights,
                 n_trials=n_trials,
             )
