@@ -1,9 +1,38 @@
 import pandas as pd
 import plotly.graph_objs as go
+import ta
 
 from backend.core.config import settings
 
 from .theme import CANDLE_DOWN, CANDLE_UP, DOWN_COLOR, LAYOUT, UP_COLOR
+
+# ATR strategy signal colors (distinct from ML prediction colors)
+ATR_BUY_COLOR = "#00BCD4"  # cyan  (buy = cool/positive)
+ATR_SELL_COLOR = "#FF9800"  # orange (sell = warm/warning)
+ATR_BAND_COLOR = "rgba(255,152,0,0.18)"
+
+
+def _compute_atr_signals(ohlcv: pd.DataFrame) -> pd.DataFrame:
+    """Compute ATR-Keltner breakout signals for 10-day holding."""
+    close, high, low = ohlcv["Close"], ohlcv["High"], ohlcv["Low"]
+
+    atr = ta.volatility.average_true_range(high, low, close, window=14)
+    ema20 = ta.trend.ema_indicator(close, window=20)
+
+    upper = ema20 + 1.5 * atr
+    lower = ema20 - 1.5 * atr
+
+    broke_upper = (close > upper) & (close.shift(1) <= upper.shift(1))
+    broke_lower = (close < lower) & (close.shift(1) >= lower.shift(1))
+
+    signals = pd.DataFrame(index=ohlcv.index)
+    signals["keltner_upper"] = upper
+    signals["keltner_lower"] = lower
+    signals["signal"] = ""
+    signals.loc[broke_upper, "signal"] = "BUY"
+    signals.loc[broke_lower, "signal"] = "SELL"
+
+    return signals
 
 
 def candlestick_chart(
@@ -191,6 +220,70 @@ def price_line_chart(
                 },
                 name="Prediction DOWN",
                 hovertemplate="%{x|%b %d}<br>DOWN @ $%{y:,.2f}<extra></extra>",
+            )
+        )
+
+    # --- ATR-Keltner strategy signals ---
+    atr_signals = _compute_atr_signals(ohlcv)
+
+    # Keltner bands (subtle)
+    fig.add_trace(
+        go.Scatter(
+            x=ohlcv.index,
+            y=atr_signals["keltner_upper"],
+            mode="lines",
+            line={"color": ATR_BUY_COLOR, "width": 1, "dash": "dash"},
+            name="Keltner Upper",
+            hoverinfo="skip",
+            opacity=0.4,
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=ohlcv.index,
+            y=atr_signals["keltner_lower"],
+            mode="lines",
+            line={"color": ATR_SELL_COLOR, "width": 1, "dash": "dash"},
+            name="Keltner Lower",
+            hoverinfo="skip",
+            opacity=0.4,
+        )
+    )
+
+    # ATR buy/sell markers (diamonds — distinct from ML triangles)
+    atr_buys = atr_signals[atr_signals["signal"] == "BUY"]
+    atr_sells = atr_signals[atr_signals["signal"] == "SELL"]
+
+    if not atr_buys.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=atr_buys.index,
+                y=ohlcv.loc[atr_buys.index, "Close"],
+                mode="markers",
+                marker={
+                    "symbol": "diamond",
+                    "size": 11,
+                    "color": ATR_BUY_COLOR,
+                    "line": {"width": 1.5, "color": "white"},
+                },
+                name="ATR Buy",
+                hovertemplate="%{x|%b %d}<br>ATR BUY @ $%{y:,.2f}<extra></extra>",
+            )
+        )
+    if not atr_sells.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=atr_sells.index,
+                y=ohlcv.loc[atr_sells.index, "Close"],
+                mode="markers",
+                marker={
+                    "symbol": "diamond",
+                    "size": 11,
+                    "color": ATR_SELL_COLOR,
+                    "line": {"width": 1.5, "color": "white"},
+                },
+                name="ATR Sell",
+                hovertemplate="%{x|%b %d}<br>ATR SELL @ $%{y:,.2f}<extra></extra>",
             )
         )
 
