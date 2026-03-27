@@ -14,3 +14,13 @@
   - Horizontale S/R-Linien an jedem Swing-Punkt
   - **SQ Long / SQ Short**: Signal bei Punkt 3 einer Sequenz (3× konsekutive HH/HL bzw. LH/LL)
   - **Stop-Loss**: Gestrichelte Linie am letzten signifikanten Swing-High
+- **Market Structure Signals (BOS / CHoCH)**:
+  - **CHoCH (Change of Character)**: Cyan/Orange Stern ⭐ — Trendwechsel-Signal
+    - ⚡ LONG: Abwärtstrend gebrochen → potentieller Einstieg Long
+    - ⚡ SHORT: Aufwärtstrend gebrochen → potentieller Einstieg Short / Ausstieg Long
+    - Gestrichelte Level-Linie zeigt das gebrochene Niveau
+    - Vertikale gepunktete Verbindungslinie zum Breakpoint
+    - Annotation-Box mit Signal-Label
+  - **BOS (Break of Structure)**: Kleine Diamanten — Trendbestätigung
+    - BOS ▲ (grün): Aufwärtstrend bestätigt (Hold/Add Long)
+    - BOS ▼ (rot): Abwärtstrend bestätigt (Hold/Add Short)

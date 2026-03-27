@@ -18,6 +18,10 @@ DOW_UP_COLOR = "rgba(0,230,118,0.6)"  # green zigzag (uptrend)
 DOW_DOWN_COLOR = "rgba(255,82,82,0.6)"  # red zigzag (downtrend)
 DOW_NEUTRAL_COLOR = "rgba(255,255,255,0.3)"  # neutral/undefined
 
+# Structure signal colors (BOS / CHoCH)
+SIGNAL_LONG_COLOR = "#00E5FF"  # Cyan — bullish reversal entry
+SIGNAL_SHORT_COLOR = "#FF6D00"  # Orange — bearish reversal entry
+
 
 def _compute_atr_days(ohlcv: pd.DataFrame) -> pd.DataFrame:
     """Classify each day by its range relative to ATR (14)."""
@@ -148,6 +152,177 @@ def _detect_dow_swings(ohlcv: pd.DataFrame, order: int = 5) -> pd.DataFrame:
     df["trend"] = trends
 
     return df
+
+
+def _detect_structure_signals(ohlcv: pd.DataFrame, swings: pd.DataFrame) -> list[dict]:
+    """Detect Break of Structure (BOS) and Change of Character (CHoCH).
+
+    BOS: Trend continuation — swing high/low broken in trend direction.
+    CHoCH: Trend reversal — key level broken against prevailing trend.
+    """
+    if len(swings) < 3:
+        return []
+
+    signals = []
+    prevailing = None  # "up" or "down"
+
+    for i in range(1, len(swings)):
+        curr = swings.iloc[i]
+        lbl = curr["label"]
+        if lbl in ("H", "L"):
+            continue
+
+        prev_all = swings.iloc[:i]
+        prev_highs = prev_all[prev_all["swing_type"] == "high"]
+        prev_lows = prev_all[prev_all["swing_type"] == "low"]
+
+        signal_type = None
+        direction = None
+        level_price = None
+        level_date = None
+
+        if prevailing == "up":
+            if lbl == "HH" and not prev_highs.empty:
+                signal_type, direction = "bos", "long"
+                level_price = prev_highs.iloc[-1]["price"]
+                level_date = prev_highs.iloc[-1]["date"]
+            elif lbl == "LL" and not prev_lows.empty:
+                signal_type, direction = "choch", "short"
+                level_price = prev_lows.iloc[-1]["price"]
+                level_date = prev_lows.iloc[-1]["date"]
+                prevailing = "down"
+        elif prevailing == "down":
+            if lbl == "LL" and not prev_lows.empty:
+                signal_type, direction = "bos", "short"
+                level_price = prev_lows.iloc[-1]["price"]
+                level_date = prev_lows.iloc[-1]["date"]
+            elif lbl == "HH" and not prev_highs.empty:
+                signal_type, direction = "choch", "long"
+                level_price = prev_highs.iloc[-1]["price"]
+                level_date = prev_highs.iloc[-1]["date"]
+                prevailing = "up"
+        else:
+            if lbl in ("HH", "HL"):
+                prevailing = "up"
+            elif lbl in ("LH", "LL"):
+                prevailing = "down"
+            continue
+
+        if signal_type is None or level_price is None:
+            continue
+
+        # Find the actual bar where the level was broken
+        prev_swing = swings.iloc[i - 1]
+        mask = (ohlcv.index >= prev_swing["date"]) & (ohlcv.index <= curr["date"])
+        window = ohlcv.loc[mask]
+
+        break_date = curr["date"]
+        break_price = float(curr["price"])
+
+        if direction == "long":
+            breaks = window[window["Close"] > level_price]
+        else:
+            breaks = window[window["Close"] < level_price]
+
+        if not breaks.empty:
+            break_date = breaks.index[0]
+            break_price = float(breaks.iloc[0]["Close"])
+
+        signals.append(
+            {
+                "date": break_date,
+                "price": break_price,
+                "level": level_price,
+                "level_date": level_date,
+                "type": signal_type,
+                "direction": direction,
+            }
+        )
+
+    return signals
+
+
+def _add_structure_signals(fig: go.Figure, ohlcv: pd.DataFrame, swings: pd.DataFrame) -> None:
+    """Draw BOS/CHoCH entry & exit signals on chart."""
+    signals = _detect_structure_signals(ohlcv, swings)
+    if not signals:
+        return
+
+    # Only show CHoCH signals (entry/exit); skip BOS to reduce clutter
+    choch_signals = [s for s in signals if s["type"] == "choch"]
+    if not choch_signals:
+        return
+
+    long_pts = [s for s in choch_signals if s["direction"] == "long"]
+    short_pts = [s for s in choch_signals if s["direction"] == "short"]
+
+    if long_pts:
+        fig.add_trace(
+            go.Scatter(
+                x=[s["date"] for s in long_pts],
+                y=[s["price"] for s in long_pts],
+                mode="markers",
+                marker={
+                    "symbol": "star",
+                    "size": 16,
+                    "color": SIGNAL_LONG_COLOR,
+                    "line": {"width": 1.5, "color": "#FFFFFF"},
+                },
+                name="\u26a1 Long",
+                hovertemplate="%{x|%b %d}<br>CHoCH Long<br>$%{y:,.2f}<extra></extra>",
+            )
+        )
+    if short_pts:
+        fig.add_trace(
+            go.Scatter(
+                x=[s["date"] for s in short_pts],
+                y=[s["price"] for s in short_pts],
+                mode="markers",
+                marker={
+                    "symbol": "star",
+                    "size": 16,
+                    "color": SIGNAL_SHORT_COLOR,
+                    "line": {"width": 1.5, "color": "#FFFFFF"},
+                },
+                name="\u26a1 Short",
+                hovertemplate="%{x|%b %d}<br>CHoCH Short<br>$%{y:,.2f}<extra></extra>",
+            )
+        )
+
+    # Level line + label for each CHoCH signal
+    for sig in choch_signals:
+        is_long = sig["direction"] == "long"
+        color = SIGNAL_LONG_COLOR if is_long else SIGNAL_SHORT_COLOR
+
+        # Dashed level line showing the broken level
+        fig.add_shape(
+            type="line",
+            x0=sig["level_date"],
+            x1=sig["date"],
+            y0=sig["level"],
+            y1=sig["level"],
+            line={"color": color, "width": 1.5, "dash": "dash"},
+            opacity=0.5,
+        )
+
+        # Signal label
+        label = "\u26a1 LONG" if is_long else "\u26a1 SHORT"
+        fig.add_annotation(
+            x=sig["date"],
+            y=sig["price"],
+            text=f"<b>{label}</b>",
+            showarrow=True,
+            arrowhead=2,
+            arrowcolor=color,
+            arrowwidth=1,
+            ax=-45 if is_long else 45,
+            ay=-25 if is_long else 25,
+            font={"size": 10, "color": color},
+            bgcolor="rgba(14,17,23,0.85)",
+            bordercolor=color,
+            borderwidth=1,
+            borderpad=3,
+        )
 
 
 def candlestick_chart(
@@ -397,109 +572,23 @@ def price_line_chart(
                 )
             )
 
-        # Swing point labels with sequence count (HH/HL/LH/LL + number)
+        # Swing point labels (HH/HL/LH/LL — no sequence numbers)
         for _, sw in swings.iterrows():
             if sw["label"] in ("H", "L"):
-                continue  # skip first unlabeled points
-            if sw["label"] in ("HH", "HL"):
-                lbl_color = "#00E676"
-            else:
-                lbl_color = "#FF5252"
-
-            # Show label + sequence number
-            seq_num = int(sw["seq_count"])
-            label_text = f"<b>{sw['label']}</b>"
-            if seq_num > 0:
-                label_text = f"<b>{sw['label']} {seq_num}</b>"
+                continue
+            lbl_color = "#00E676" if sw["label"] in ("HH", "HL") else "#FF5252"
 
             fig.add_annotation(
                 x=sw["date"],
                 y=sw["price"],
-                text=label_text,
+                text=f"<b>{sw['label']}</b>",
                 showarrow=False,
                 font={"size": 9, "color": lbl_color},
-                yshift=14 if sw["swing_type"] == "high" else -14,
+                yshift=12 if sw["swing_type"] == "high" else -12,
             )
 
-            # Horizontal S/R line at each swing point
-            fig.add_shape(
-                type="line",
-                x0=sw["date"],
-                x1=ohlcv.index[-1],
-                y0=sw["price"],
-                y1=sw["price"],
-                line={
-                    "color": lbl_color,
-                    "width": 0.7,
-                    "dash": "dot",
-                },
-                opacity=0.25,
-            )
-
-            # Sequence start marker at point 3 → "Trend Long" / "Trend Short"
-            if seq_num == 3:
-                if sw["seq_dir"] == "long":
-                    trend_text = "▲ SQ Long"
-                    trend_color = "#00E676"
-                else:
-                    trend_text = "▼ SQ Short"
-                    trend_color = "#FF5252"
-
-                fig.add_annotation(
-                    x=sw["date"],
-                    y=sw["price"],
-                    text=f"<b>{trend_text}</b>",
-                    showarrow=True,
-                    arrowhead=0,
-                    arrowcolor=trend_color,
-                    arrowwidth=1.5,
-                    ax=40,
-                    ay=-30 if sw["swing_type"] == "high" else 30,
-                    font={"size": 11, "color": trend_color},
-                    bgcolor="rgba(14,17,23,0.8)",
-                    bordercolor=trend_color,
-                    borderwidth=1,
-                    borderpad=3,
-                )
-
-                # Stop-Loss at last significant high
-                idx = swings.index.get_loc(sw.name)
-                prev_swings = swings.iloc[:idx]
-                highs = prev_swings[prev_swings["swing_type"] == "high"]
-                sl = highs.iloc[-1] if not highs.empty else None
-
-                if sl is not None:
-                    sl_color = "#FF5252" if sw["seq_dir"] == "long" else "#00E676"
-
-                    # Thick dashed SL line from signal date to chart end
-                    fig.add_shape(
-                        type="line",
-                        x0=sw["date"],
-                        x1=ohlcv.index[-1],
-                        y0=sl["price"],
-                        y1=sl["price"],
-                        line={
-                            "color": sl_color,
-                            "width": 2,
-                            "dash": "dash",
-                        },
-                        opacity=0.6,
-                    )
-
-                    # SL label
-                    fig.add_annotation(
-                        x=ohlcv.index[-1],
-                        y=sl["price"],
-                        text=f"<b>SL ${sl['price']:,.0f}</b>",
-                        showarrow=False,
-                        font={"size": 10, "color": sl_color},
-                        xanchor="left",
-                        xshift=5,
-                        bgcolor="rgba(14,17,23,0.8)",
-                        bordercolor=sl_color,
-                        borderwidth=1,
-                        borderpad=2,
-                    )
+    # --- Market Structure signals (BOS / CHoCH) ---
+    _add_structure_signals(fig, ohlcv, swings)
 
     fig.update_layout(
         **LAYOUT,
