@@ -27,6 +27,7 @@ def load_price_data(months: int = 6) -> pd.DataFrame:
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.droplevel(1)
         if not df.empty:
+            df.index = pd.to_datetime(df.index).normalize()
             logger.info("load_price_data: fetched %d rows from yfinance", len(df))
             return df
     except Exception as exc:
@@ -36,7 +37,7 @@ def load_price_data(months: int = 6) -> pd.DataFrame:
     try:
         store = get_data_store()
         df = store.load_raw()
-        df.index = pd.to_datetime(df.index)
+        df.index = pd.to_datetime(df.index).normalize()
         df = df[df.index >= cutoff]
         if not df.empty:
             logger.info("load_price_data: fallback to store, %d rows", len(df))
