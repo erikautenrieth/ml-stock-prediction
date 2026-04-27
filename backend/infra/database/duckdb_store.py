@@ -35,7 +35,7 @@ class DuckDBStore(DataStore):
             self._remote.upload(path, self._remote_key(path))
 
     def _read_parquet(self, path: Path) -> pd.DataFrame:
-        if not path.exists() and self._remote is not None:
+        if self._remote is not None:
             key = self._remote_key(path)
             if self._remote.exists(key):
                 self._remote.download(key, path)
