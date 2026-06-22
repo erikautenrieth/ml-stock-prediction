@@ -1,0 +1,2 @@
+# Override GitHub language stats — notebooks inflate byte count
+*.ipynb linguist-language=Python

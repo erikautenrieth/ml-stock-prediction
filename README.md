@@ -53,6 +53,7 @@ graph LR
   <img src="https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white" alt="Streamlit" />
   <img src="https://img.shields.io/badge/Python_3.12-3776AB?logo=python&logoColor=white" alt="Python" />
 </p>
+
 ## Quickstart
 
 ```bash
@@ -80,3 +81,7 @@ All parameters live in `params.yaml` — symbol, prediction horizon, feature win
 - `backend/workflows/` — pipeline entry points (fetch, train, predict)
 - `frontend/` — Streamlit app with candlestick charts
 - `tests/` — pytest suite
+
+## CI/CD
+
+Two GitHub Actions workflows run the pipeline automatically. **Daily** (Mon–Fri after market close): fetches the latest data and generates predictions with the current champion model. **Weekly** (Sunday): runs full Optuna retraining and promotes a new model only if it beats the existing one.
