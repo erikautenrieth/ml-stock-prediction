@@ -23,7 +23,6 @@ from frontend.charts import (
 from frontend.data_loader import load_predictions, load_price_data
 from frontend.model_card import render_model_card
 
-
 # ---------------------------------------------------------------------------
 # Layout helpers
 # ---------------------------------------------------------------------------
@@ -125,11 +124,29 @@ def main() -> None:
         layout="wide",
     )
 
+    # Initialize theme state before sidebar renders
+    if "theme_dark" not in st.session_state:
+        st.session_state["theme_dark"] = True
+
     horizon = settings.stock.prediction_horizon_days
 
     with st.sidebar:
         st.header("⚙️ Settings")
+        dark_mode = st.toggle("🌙 Dark Mode", value=True, key="theme_dark")
         months = st.slider("Chart history (months)", min_value=1, max_value=24, value=6)
+
+    # Apply light-mode CSS override when toggled off
+    if not dark_mode:
+        st.markdown(
+            """
+            <style>
+            .stApp { background-color: #FFFFFF; color: #1a1a1a; }
+            .stSidebar { background-color: #F5F5F5; }
+            .stMarkdown, .stMetric, .stCaption { color: #1a1a1a; }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # --- Data ---
     ohlcv = load_price_data(months=months)
