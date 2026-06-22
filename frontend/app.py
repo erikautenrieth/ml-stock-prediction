@@ -140,9 +140,46 @@ def main() -> None:
         st.markdown(
             """
             <style>
-            .stApp { background-color: #FFFFFF; color: #1a1a1a; }
-            .stSidebar { background-color: #F5F5F5; }
-            .stMarkdown, .stMetric, .stCaption { color: #1a1a1a; }
+            /* Main app background */
+            .stApp { background-color: #FFFFFF !important; }
+
+            /* Sidebar */
+            section[data-testid="stSidebar"] {
+                background-color: #F8F9FA !important;
+            }
+            section[data-testid="stSidebar"] * {
+                color: #1a1a1a !important;
+            }
+
+            /* All text elements */
+            .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp p,
+            .stApp span, .stApp label, .stApp div {
+                color: #1a1a1a !important;
+            }
+
+            /* Tabs */
+            .stTabs [data-baseweb="tab-list"] button {
+                color: #555555 !important;
+            }
+            .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+                color: #FF4B4B !important;
+            }
+
+            /* Radio buttons */
+            .stRadio label span { color: #1a1a1a !important; }
+
+            /* Slider */
+            .stSlider label, .stSlider span { color: #1a1a1a !important; }
+
+            /* Metrics */
+            [data-testid="stMetricValue"] { color: #1a1a1a !important; }
+            [data-testid="stMetricLabel"] { color: #555555 !important; }
+
+            /* Divider */
+            hr { border-color: #E0E0E0 !important; }
+
+            /* Toggle label fix */
+            .stToggle label span { color: #1a1a1a !important; }
             </style>
             """,
             unsafe_allow_html=True,
